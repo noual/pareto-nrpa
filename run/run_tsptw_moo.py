@@ -14,7 +14,7 @@ from search_algorithms.pareto_nrpa.slice_pareto_nrpa import SliceParetoNRPA
 from search_algorithms.sms_emoa import SMSEMOAAlgorithm
 
 SEARCH_SPACE = "tsptw_moo"
-DATASET = "rc_208.1"
+DATASET = "rc_207.3"
 
 N_RUNS = 30
 OUTPUT_FILE = "results"

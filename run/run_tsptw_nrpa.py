@@ -5,6 +5,10 @@ import pandas as pd
 from pymoo.core.result import Result
 from yacs.config import CfgNode
 import sys
+
+from search_algorithms.pareto_nrpa.oriented_policies_nrpa import OrientedPoliciesNRPA
+from search_algorithms.pareto_nrpa.pareto_nrpa import ParetoNRPA
+
 sys.path.append("..")
 from search_algorithms.nsga2 import NSGAII
 from search_algorithms.sms_emoa import SMSEMOAAlgorithm
@@ -29,7 +33,7 @@ def run_once(algo_dict):
         hypervolumes[name] = alg.hypervolume_history
         print(hypervolumes)
 
-        if isinstance(optimal_set, Result):run_tsptw_nsga2.py
+        if isinstance(optimal_set, Result):
             if not hasattr(optimal_set, "P"):
                 optimal_set.P = np.zeros(optimal_set.X.shape[0])
             rewards[name] = {"X": optimal_set.X.squeeze().tolist(),
@@ -67,44 +71,55 @@ def run_all(algo_dict, output_file="results_local"):
                     "iteration": i*(N_ITER//len(hypervolumes_)-1),
                     "hypervolume": hv_ })
         df = pd.DataFrame(all_results)
-        df.to_csv(f"results/emoa_{SEARCH_SPACE}_{DATASET}.csv")
+        df.to_csv(f"results/paretonrpa_{SEARCH_SPACE}_{DATASET}.csv")
         df_hv = pd.DataFrame(hypervolumes)
-        df_hv.to_csv(f"results/emoa_{SEARCH_SPACE}_{DATASET}_hv.csv")
+        df_hv.to_csv(f"results/paretonrpa_{SEARCH_SPACE}_{DATASET}_hv.csv")
 
 if __name__ == '__main__':
     path = "../data/tsptw/SolomonTSPTW"
     algorithms = {
-    "NSGAII": {
-        "algorithm": NSGAII,
-        "config": CfgNode({
-            "df_path": "none",
-            "search": {
-                "n_iter": N_ITER,
-                "population_size": 250,
-                "sample_size": 25
-            },
-            "disable_tqdm": "false",
-            "seed": 0
-        })
-    },
-    "SMS-EMOA": {
-        "algorithm": SMSEMOAAlgorithm,
-        "config": CfgNode({
-            "df_path": "none",
-            "search": {
-                "n_iter": N_ITER,
-                "population_size": 250,
-                "sample_size": 25
-            },
-            "disable_tqdm": "false",
-            "seed": 0
-        })
-    },
+        "Pareto-NRPA": {
+            "algorithm": ParetoNRPA,
+            "config": CfgNode({
+                "df_path": "none",
+                "search": {
+                    "level": 4,
+                    "nrpa_alpha": .5,
+                    "nrpa_lr_update": False,
+                    "softmax_temp": 1,
+                    "playouts_per_selection": 1,
+                    "n_iter": N_ITER,
+                    "n_policies": 4
+                },
+                "disable_tqdm": "true",
+                "callback": "true",
+                "seed": 0
+            })
+        },
+        "Pareto-NRPA_OrientedPolicies": {
+            "algorithm": OrientedPoliciesNRPA,
+            "config": CfgNode({
+                "df_path": "none",
+                "search": {
+                    "level": 4,
+                    "nrpa_alpha": .5,
+                    "nrpa_lr_update": False,
+                    "softmax_temp": 1,
+                    "playouts_per_selection": 1,
+                    "n_iter": N_ITER,
+                    "n_policies": 4,
+                    "C": 2
+                },
+                "disable_tqdm": "true",
+                "callback": "true",
+                "seed": 0
+            })
+        },
     }
 
     for file in os.listdir(path):
         if file.startswith("."): continue
         SEARCH_SPACE = "tsptw_moo"
         DATASET = file.split(".txt")[0]
-        print(f"Running NSGAII on {DATASET}...")
+        print(f"Running Pareto-NRPA on {DATASET}...")
         run_all(algorithms, OUTPUT_FILE)
