@@ -97,7 +97,7 @@ class PolicyManager:
             pm.update_policy(k, v.copy())
         return pm
 
-    def adapt_all(self, optimal_set, algorithm):
+    def adapt(self, optimal_set, algorithm):
         """
         Adapt policies based on the optimal set.
         """
@@ -135,7 +135,7 @@ class PolicyManager:
             self.update_policy(policy_index, pol_prime)
         self.update_weights(optimal_set)
 
-    def adapt(self, optimal_set, algorithm):
+    def adapt_one(self, optimal_set, algorithm):
         """
         Adapt policies based on the optimal set.
         """
@@ -614,4 +614,4 @@ class MyCallback(Callback):
             pop = population.get("F")[population.get("P") == i]
             scatter1.add(pop, label=f"Policy {i}")
         scatter1.do()
-        self.rec.record()
+        #self.rec.record()

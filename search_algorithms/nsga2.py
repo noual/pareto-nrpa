@@ -109,7 +109,7 @@ class MyCallback(Callback):
         scatter.set_axis_style(color="grey", alpha=0.5)
         scatter.add(algorithm.pop.get("F"))
         scatter.do()
-        self.rec.record()
+        #self.rec.record()
 
 
 class PolynomialMutation(Mutation):
