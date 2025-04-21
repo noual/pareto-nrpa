@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 from pymoo.core.result import Result
 from yacs.config import CfgNode
-
+import sys
+sys.path.append("..")
 from search_algorithms.nsga2 import NSGAII
 from search_algorithms.pareto_mcts import Pareto_UCT
 from search_algorithms.pareto_nrpa.hv_pareto_nrpa import HVParetoNRPA, HVParetoNRPALR
@@ -14,7 +15,7 @@ from search_algorithms.pareto_nrpa.slice_pareto_nrpa import SliceParetoNRPA
 from search_algorithms.sms_emoa import SMSEMOAAlgorithm
 
 SEARCH_SPACE = "tsptw_moo"
-DATASET = "rc_207.3"
+DATASET = "rc_201.2"
 
 N_RUNS = 30
 OUTPUT_FILE = "results"
@@ -74,11 +75,13 @@ def run_all(algo_dict, output_file="results_local"):
                     "iteration": i*(N_ITER//len(hypervolumes_)-1),
                     "hypervolume": hv_ })
         df = pd.DataFrame(all_results)
-        df.to_csv(f"results/nrpa_{SEARCH_SPACE}_{DATASET}.csv")
+        df.to_csv(f"results/pareto-nrpa/paretonrpa_{SEARCH_SPACE}_{DATASET}.csv")
         df_hv = pd.DataFrame(hypervolumes)
-        df_hv.to_csv(f"results/nrpa_{SEARCH_SPACE}_{DATASET}_hv.csv")
+        df_hv.to_csv(f"results/pareto-nrpa/paretonrpa_{SEARCH_SPACE}_{DATASET}_hv.csv")
 
 if __name__ == '__main__':
+
+    DATASET = sys.argv[1]
     algorithms = {
 
         # "HV-Pareto-NRPA": {
@@ -150,6 +153,7 @@ if __name__ == '__main__':
                 "seed": 0
             })
         },
+
         # "NSGAII": {
         #     "algorithm": NSGAII,
         #     "config": CfgNode({
@@ -213,25 +217,25 @@ if __name__ == '__main__':
         #         "seed": 0
         #     })
         # },
-        "Pareto-NRPA_OrientedPolicies": {
-            "algorithm": OrientedPoliciesNRPA,
-            "config": CfgNode({
-                "df_path": "none",
-                "search": {
-                    "level": 4,
-                    "nrpa_alpha": .5,
-                    "nrpa_lr_update": False,
-                    "softmax_temp": 1,
-                    "playouts_per_selection": 1,
-                    "n_iter": N_ITER,
-                    "n_policies": 4,
-                    "C": 2
-                },
-                "disable_tqdm": "true",
-                "callback": "true",
-                "seed": 0
-            })
-        },
+        # "Pareto-NRPA_OrientedPolicies": {
+        #     "algorithm": OrientedPoliciesNRPA,
+        #     "config": CfgNode({
+        #         "df_path": "none",
+        #         "search": {
+        #             "level": 3,
+        #             "nrpa_alpha": .5,
+        #             "nrpa_lr_update": False,
+        #             "softmax_temp": 1,
+        #             "playouts_per_selection": 1,
+        #             "n_iter": N_ITER,
+        #             "n_policies": 4,
+        #             "C": 2
+        #         },
+        #         "disable_tqdm": "true",
+        #         "callback": "true",
+        #         "seed": 0
+        #     })
+        # },
         # "Slice_Pareto-NRPA": {
         #     "algorithm": SliceParetoNRPA,
         #     "config": CfgNode({
