@@ -27,7 +27,7 @@ class Pareto_UCT(MCTSAgent):
         if config.callback:
             self.callback = MyCallback()
 
-    def _score_node(self, child: Node, parent: Node, C=None) -> tuple[float, float]:
+    def _score_node(self, child: Node, parent: Node, C=None):
         # Returns UCB score for a child node
         if len(child.results) == 0:  # Si le noeud n'a pas encore été visité !
             return -np.inf, -np.inf  #TODO:     adapt to n dimensions
@@ -137,7 +137,6 @@ class Pareto_UCT(MCTSAgent):
         # print(f"---")
         reward = playout_node.get_multiobjective_reward(None, None, None, None)
         reward = (-reward[0], -reward[1])  # Minimizing both objectives
-
         individual = Individual()
         individual.X = playout_node.state.path
         individual.F = reward
@@ -180,14 +179,21 @@ class Pareto_UCT(MCTSAgent):
 
             # Anytime Pareto set
 
-            if self.advancement % 100 == 0:
+            if self.advancement % 1000 == 0:
                 """
                 Video callback and hypervolume calculation
                 """
                 anytime_pareto_set = Population()
                 nds = NonDominatedSorting()
                 front = nds.do(self.optimal_set.get("F"), only_non_dominated_front=True)
-                anytime_pareto_set = self.optimal_set[front]
+                indexes = []
+                for f in front:
+                    el = self.optimal_set[f]
+                    if el.get("F")[0] in [self.optimal_set[e].get("F")[0] for e in indexes]:
+                        if el.get("F")[1] in [self.optimal_set[e].get("F")[1] for e in indexes]:
+                            continue
+                    indexes.append(f)
+                anytime_pareto_set = self.optimal_set[indexes]
                 print(f"Front: {anytime_pareto_set.get("F")}")
                 self.optimal_set = anytime_pareto_set
                 approx_ideal = anytime_pareto_set.get("F").min(axis=0)
