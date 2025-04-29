@@ -22,6 +22,11 @@ from pymoo.optimize import minimize
 from pyrecorder.recorder import Recorder
 from pyrecorder.writers.streamer import Streamer
 
+from search_spaces.nasbench101.nasbench101_node import NASBench101Problem, NASBench101Sampling, NASBench101Mutation, \
+    NASBench101Crossover, NASBench101Evaluator
+from search_spaces.nasbench201.nasbench201_node import NASBench201Problem
+from search_spaces.nasbench301.nasbench301_node import NASBench301Problem, NASBench301Sampling, NASBench301Mutation, \
+    NASBench301Evaluator, NASBench301Crossover
 from search_spaces.radar.radar_node import RadarProblem
 from search_spaces.tsptw.tsptw_node import TSPTSWProblem
 
@@ -48,7 +53,8 @@ class SMSEMOAAlgorithm:
 
 
     def adapt_search_space(self, search_space, dataset):
-        supported_ss = ["tsptw_moo", "radar"]
+        supported_ss = ["tsptw_moo", "radar", "nasbench201", "nasbench101", "nasbench301"]
+
         assert search_space in supported_ss, f"Search space {search_space} not supported. Supported search spaces: {supported_ss}"
         if search_space == "tsptw_moo":
             self.problem = TSPTSWProblem(file=f"../data/tsptw/SolomonTSPTW/{dataset}.txt")
@@ -57,6 +63,56 @@ class SMSEMOAAlgorithm:
             self.nadir = nadirs[dataset]
             self.algorithm.nadir= self.nadir
 
+        elif search_space == "nasbench201":
+            self.problem = NASBench201Problem()
+            self.algorithm = SMSEMOA(
+                pop_size=250,
+                n_offsprings=25,
+                sampling=IntegerRandomSampling(),
+                crossover=SBX(eta=20),
+                mutation=PolynomialMutation(eta=20),
+                eliminate_duplicates=True,
+                repair=RoundingRepair(),
+                callback=self.callback,
+                save_history=True,
+            )
+            self.callback.initialize(self.algorithm)
+            self.nadir = (100, 1531556)  # worst accuracy and biggest number of params
+            self.algorithm.nadir = self.nadir
+
+        elif search_space == "nasbench101":
+            self.problem = NASBench101Problem()
+            self.algorithm = SMSEMOA(
+                pop_size=250,
+                n_offsprings=25,
+                sampling=NASBench101Sampling(),
+                crossover=NASBench101Crossover(),
+                mutation=NASBench101Mutation(),
+                eliminate_duplicates=False,
+                callback=self.callback,
+                save_history=True,
+                evaluator=NASBench101Evaluator()
+            )
+            self.callback.initialize(self.algorithm)
+            self.nadir = (100, 49979274)
+            self.algorithm.nadir = self.nadir
+
+        elif search_space == "nasbench301":
+            self.problem = NASBench301Problem()
+            self.algorithm = SMSEMOA(
+                pop_size=50,
+                n_offsprings=25,
+                sampling=NASBench301Sampling(),
+                crossover=NASBench301Crossover(),
+                mutation=NASBench301Mutation(),
+                eliminate_duplicates=False,
+                callback=self.callback,
+                save_history=True,
+                evaluator=NASBench301Evaluator()
+            )
+            self.callback.initialize(self.algorithm)
+            self.nadir = (100, 49979274)
+            self.algorithm.nadir = self.nadir
 
         elif search_space == "radar":
             self.problem = RadarProblem(dataset)

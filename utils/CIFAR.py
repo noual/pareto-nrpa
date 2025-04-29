@@ -55,7 +55,7 @@ class CIFAR10Dataset(Dataset):
 
 
 class CIFAR100Dataset(Dataset):
-    def __init__(self, data_dir="../../naslib/data/cifar-100-python", mode='train'):
+    def __init__(self, data_dir="../../naslib2/data/cifar-100-python", mode='train'):
         if mode == 'train':
             self.data = self.load_batch(data_dir, 'train')
         elif mode == 'test':

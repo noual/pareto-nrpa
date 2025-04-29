@@ -194,7 +194,7 @@ class Pareto_UCT(MCTSAgent):
                             continue
                     indexes.append(f)
                 anytime_pareto_set = self.optimal_set[indexes]
-                print(f"Front: {anytime_pareto_set.get("F")}")
+                print(f"Front: {anytime_pareto_set.get('F')}")
                 self.optimal_set = anytime_pareto_set
                 approx_ideal = anytime_pareto_set.get("F").min(axis=0)
                 approx_nadir = anytime_pareto_set.get("F").max(axis=0)

@@ -15,7 +15,7 @@ from search_algorithms.pareto_nrpa.slice_pareto_nrpa import SliceParetoNRPA
 from search_algorithms.sms_emoa import SMSEMOAAlgorithm
 
 SEARCH_SPACE = "tsptw_moo"
-DATASET = "rc_201.2"
+DATASET = "rc_201.3"
 
 N_RUNS = 30
 OUTPUT_FILE = "results"
@@ -75,9 +75,9 @@ def run_all(algo_dict, output_file="results_local"):
                     "iteration": i*(N_ITER//len(hypervolumes_)-1),
                     "hypervolume": hv_ })
         df = pd.DataFrame(all_results)
-        df.to_csv(f"results/pareto-nrpa/paretonrpa_{SEARCH_SPACE}_{DATASET}.csv")
+        df.to_csv(f"results/pareto-nrpa/one_policy_paretonrpa_{SEARCH_SPACE}_{DATASET}.csv")
         df_hv = pd.DataFrame(hypervolumes)
-        df_hv.to_csv(f"results/pareto-nrpa/paretonrpa_{SEARCH_SPACE}_{DATASET}_hv.csv")
+        df_hv.to_csv(f"results/pareto-nrpa/one_policy_paretonrpa_{SEARCH_SPACE}_{DATASET}_hv.csv")
 
 if __name__ == '__main__':
 

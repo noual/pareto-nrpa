@@ -26,10 +26,11 @@ from pymoo.core.result import Result
 from pymoo.operators.survival.rank_and_crowding import RankAndCrowding
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 from tqdm import tqdm
+from nasbench import api as ModelSpecAPI
 
 # from monet.node import Node
 # from monet.search_algorithms.nested import NRPA
-# from naslib.search_spaces.core import Metric
+# from naslib2.search_spaces.core import Metric
 
 
 class PolicyManager:
@@ -124,7 +125,11 @@ class PolicyManager:
                 move_codes = [algorithm._code(node, m) for m in available_moves]
                 for move, move_code in zip(available_moves, move_codes):
                     # print(f"[Adapt] {node.state.path[i], move[0]}")
-                    o[move_code] = np.exp(policy.get(move_code, 0) + algorithm.b[(node.state.path[i], move[0])])
+                    if algorithm.search_space == "tsptw_moo":
+                        o[move_code] = np.exp(policy.get(move_code, 0) + algorithm.b[(node.state.path[i], move[0])])
+                    elif algorithm.search_space in ["nasbench201", "nasbench101", "nasbench301"]:
+                        o[move_code] = np.exp(policy.get(move_code, 0))
+
                     z += o[move_code]
                 for move, move_code in zip(available_moves, move_codes):
                     pol_prime[move_code] = pol_prime.get(move_code, 0) -  (self.alpha*dis) * (o[move_code] / z)
@@ -206,6 +211,8 @@ class ParetoNRPA(MCTSAgent):
     def softmax_temp_fn(self, x, tau, **kwargs):
         if "b" in kwargs:
             b = kwargs["b"]
+            if b is None:
+                b = np.zeros(x.shape)
         else:
             b = np.zeros(x.shape)
         e_x = np.exp((x / tau) + b)
@@ -227,8 +234,8 @@ class ParetoNRPA(MCTSAgent):
             return node.hash
 
         state_code = node.hash
-        code = str(state_code)
-        # code = ""  # J'enlève le hashage de zobrist pour le moment # justepourvoir
+        # code = str(state_code)
+        code = ""  # J'enlève le hashage de zobrist pour le moment # justepourvoir
         for i in range(len(move)):
             code = code + str(move[i])
 
@@ -262,10 +269,12 @@ class ParetoNRPA(MCTSAgent):
             policy_values = [policy[self._code(playout_node, move)] for move in
                              available_actions]  # Calcule la probabilité de sélectionner chaque action avec la policy
             b = None
-            if hasattr(self, "b"):  # Bias term for GNRPA
-                # print([(playout_node.state.path[-1], move[0]) for move in available_actions])
-                b = [self.b[(playout_node.state.path[-1], move[0])] for move in
-                     available_actions]  #TODO: change to other than tsptw
+            if hasattr(self, "b"):
+                if self.b:
+                    # Bias term for GNRPA
+                    # print([(playout_node.state.path[-1], move[0]) for move in available_actions])
+                    b = [self.b[(playout_node.state.path[-1], move[0])] for move in
+                         available_actions]  #TODO: change to other than tsptw
                 # print(b)
             # probas_raw = self.softmax_temp_fn(np.array(policy_values), self.softmax_temp, b=np.zeros_like(np.array(policy_values)))
             # print(f"Raw probabilities: {probas_raw}")
@@ -291,11 +300,95 @@ class ParetoNRPA(MCTSAgent):
 
         # compact = convert_genotype_to_compact(genotype_config)
         # print(f"With p={joint_proba:.4f} : Sampling {sequence}")
-        reward = playout_node.get_multiobjective_reward(self.api, metric=None, dataset="cifar10", df=self.df)
-        reward = (-reward[0], -reward[1])  # Minimizing both objectives
+        if self.search_space == "nasbench201":
+            reward = playout_node.get_multiobjective_reward(None, metric="val_accuracy", dataset="cifar10", df=self.df)
+            reward = (100-reward[0], reward[1])  # Minimizing both objectives
+        elif self.search_space == "nasbench101":
+            reward = playout_node.get_multiobjective_reward(None, metric="val_accuracy", dataset="cifar10", df=self.df)
+            reward = (100-(reward[0]*100), reward[1])
+        elif self.search_space == "nasbench301":
+            reward = playout_node.get_multiobjective_reward(api=self.api, metric="val_accuracy", dataset="cifar10", df=self.df)
+            reward = (100-(reward[0]*100), reward[1])
+
+        else:
+            reward = playout_node.get_multiobjective_reward(self.api, metric=None, dataset="cifar10", df=self.df)
+            reward = (-reward[0], -reward[1])  # Minimizing both objectives
         # print(f"With p={joint_proba:.4f} : Sampling {sequence}")
         del playout_node
         return reward, sequence
+
+    def _playout_101(self, node: Node, policy):
+        node_type = type(node)
+        playout_node = node_type(state=copy.deepcopy(node.state), move=copy.deepcopy(node.move),
+                                 parent=copy.deepcopy(node.parent), sequence=copy.deepcopy(node.sequence))
+        sequence = playout_node.sequence
+        playout_node.hash = playout_node.calculate_zobrist_hash(self.root.state.zobrist_table)
+
+        is_valid = False
+        i = 0
+        joint_proba = 1
+        while not is_valid:
+            i += 1
+            if i > 100:
+                # print("Too many playouts, returning 0")
+                return 0, sequence
+            playout_node = copy.deepcopy(node)
+            playout_node.hash = playout_node.calculate_zobrist_hash(self.root.state.zobrist_table)
+            sequence = playout_node.sequence
+            while not playout_node.is_terminal():
+
+                # Vérifier si la policy a une valeur pour ce noeud
+                if self._code(playout_node, playout_node.move) not in policy:
+                    policy[self._code(playout_node, playout_node.move)] = 0
+
+                available_actions = playout_node.get_action_tuples()
+                probabilities = []
+                for move in available_actions:
+                    if self._code(playout_node, move) not in policy:
+                        policy[self._code(playout_node, move)] = 0
+
+                policy_values = [policy[self._code(playout_node, move)] for move in
+                                 available_actions]  # Calcule la probabilité de sélectionner chaque action avec la policy
+                b = None
+                if hasattr(self, "b"):  # Bias term for GNRPA
+                    if self.b:
+                        b = [self.b[move] for move in
+                             available_actions]
+                probabilities = self.softmax_temp_fn(np.array(policy_values), self.softmax_temp, b=b)
+                # if len(self.best_reward) % 100 == 0:
+                #     pprint(list(zip(available_actions, pplayout_node# Used because available_actions is not 1-dimensional
+                action_index = np.random.choice(np.arange(len(available_actions)), p=probabilities)
+                action = available_actions[action_index]  # Used because available_actions is not 1-dimensional
+                joint_proba *= probabilities[action_index]
+
+                sequence.append(action)
+                playout_node.play_action(action)
+                playout_node.hash = playout_node.calculate_zobrist_hash(self.root.state.zobrist_table)
+
+            adjacency, operations = playout_node.state.operations_and_adjacency()
+            model_spec = ModelSpecAPI.ModelSpec(
+                # Adjacency matrix of the module
+                matrix=adjacency,
+                # Operations at the vertices of the module, matches order of matrix
+                ops=operations)
+            is_valid = self.api.is_valid(model_spec)
+
+        # compact = convert_genotype_to_compact(genotype_config)
+        # print(f"With p={joint_proba:.4f} : Sampling {sequence}")
+        if self.search_space == "nasbench201":
+            reward = playout_node.get_multiobjective_reward(None, metric="val_accuracy", dataset="cifar10", df=self.df)
+            reward = (100 - reward[0], reward[1])  # Minimizing both objectives
+        elif self.search_space == "nasbench101":
+            reward = playout_node.get_multiobjective_reward(None, metric="val_accuracy", dataset="cifar10", df=self.df)
+            reward = (100 - (reward[0] * 100), reward[1])
+        else:
+            reward = playout_node.get_multiobjective_reward(self.api, metric=None, dataset="cifar10", df=self.df)
+            reward = (-reward[0], -reward[1])  # Minimizing both objectives
+        # print(f"With p={joint_proba:.4f} : Sampling {sequence}")
+        del playout_node
+        return reward, sequence
+
+
 
     def next(self, index, policy_manager):
         """
@@ -352,7 +445,7 @@ class ParetoNRPA(MCTSAgent):
                                      zero_to_one=False,
                                      ideal=approx_ideal,
                                      nadir=approx_nadir)
-
+                print(self.anytime_pareto_set.get("F"))
                 hv = metric.do(self.anytime_pareto_set.get("F"))
                 self.hypervolume_history.append(hv)
                 self.callback(self, self.anytime_pareto_set)
@@ -426,7 +519,10 @@ class ParetoNRPA(MCTSAgent):
         fronts = nds.do(optimal_set.get("F"))
         optimal_set = optimal_set[fronts[0]]
         result = Result()
-        result.X = optimal_set.get("X")
+        if self.search_space == "nasbench101":
+            result.X = np.ones_like(optimal_set.get("F"))
+        else:
+            result.X = optimal_set.get("X")
         result.F = optimal_set.get("F")
         result.P = optimal_set.get("P")
         return result

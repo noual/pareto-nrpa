@@ -87,7 +87,7 @@ class ParetoNRPALR(ParetoNRPA):
                 for elem in result:
                     for e in optimal_set:
                         if level >= 2:
-                            print(f"Comparing {[round(float(x), 2) for x in elem.get('F')]} (P{elem.get("P")} new search) and {[round(float(x), 2) for x in e.get('F')]} (P{e.get("P")} current optimal set)")
+                            print(f"Comparing {[round(float(x), 2) for x in elem.get('F')]} (P{elem.get('P')} new search) and {[round(float(x), 2) for x in e.get('F')]} (P{e.get('P')} current optimal set)")
                         if elem.get("F")[0] == e.get("F")[0] and elem.get("F")[1] == e.get("F")[1] and level != self.level:
                             if elem.get("P") == e.get("P"):
                                 count_threshold[elem.get("P")] += 1  # A voir, peut-être faux

@@ -1,5 +1,3 @@
-import os
-
 import numpy as np
 import pandas as pd
 from pymoo.core.result import Result
@@ -7,12 +5,21 @@ from yacs.config import CfgNode
 import sys
 sys.path.append("..")
 from search_algorithms.nsga2 import NSGAII
+from search_algorithms.pareto_mcts import Pareto_UCT
+from search_algorithms.pareto_nrpa.oriented_policies_nrpa import OrientedPoliciesNRPA
+from search_algorithms.pareto_nrpa.pareto_nrpa import ParetoNRPA, ParetoRandomSearch, ParetoNRPAPolicyRepresentation
+from search_algorithms.pareto_nrpa.policy_reassignment_nrpa import ThirdIdeaNRPA
+from search_algorithms.pareto_nrpa.slice_pareto_nrpa import SliceParetoNRPA
 from search_algorithms.sms_emoa import SMSEMOAAlgorithm
+
+SEARCH_SPACE = "nasbench101"
+
+DATASET = "cifar10"
 
 N_RUNS = 30
 OUTPUT_FILE = "results"
 
-N_ITER = 100000
+N_ITER = 10000
 
 def run_once(algo_dict):
     rewards = {}
@@ -67,44 +74,59 @@ def run_all(algo_dict, output_file="results_local"):
                     "iteration": i*(N_ITER//len(hypervolumes_)-1),
                     "hypervolume": hv_ })
         df = pd.DataFrame(all_results)
-        df.to_csv(f"results/emoa_{SEARCH_SPACE}_{DATASET}.csv")
+        df.to_csv(f"results/pareto-nrpa/paretonrpa_{SEARCH_SPACE}_{DATASET}.csv")
         df_hv = pd.DataFrame(hypervolumes)
-        df_hv.to_csv(f"results/emoa_{SEARCH_SPACE}_{DATASET}_hv.csv")
+        df_hv.to_csv(f"results/pareto-nrpa/paretonrpa_{SEARCH_SPACE}_{DATASET}_hv.csv")
 
 if __name__ == '__main__':
-    path = "../data/tsptw/SolomonTSPTW"
+
+    # DATASET = sys.argv[1]
     algorithms = {
-    "NSGAII": {
-        "algorithm": NSGAII,
-        "config": CfgNode({
-            "df_path": "none",
-            "search": {
-                "n_iter": N_ITER,
-                "population_size": 250,
-                "sample_size": 25
-            },
-            "disable_tqdm": "false",
-            "seed": 0
-        })
-    },
-    "SMS-EMOA": {
-        "algorithm": SMSEMOAAlgorithm,
-        "config": CfgNode({
-            "df_path": "none",
-            "search": {
-                "n_iter": N_ITER,
-                "population_size": 250,
-                "sample_size": 25
-            },
-            "disable_tqdm": "false",
-            "seed": 0
-        })
-    },
+
+        "SMS-EMOA": {
+            "algorithm": SMSEMOAAlgorithm,
+            "config": CfgNode({
+                "df_path": "../data/nas/nasbench101.csv",
+                "search": {
+                    "n_iter": N_ITER,
+                    "population_size": 200,
+                    "sample_size": 25
+                },
+                "disable_tqdm": "false",
+                "seed": 0
+            })
+        },
+        "NSGAII":{
+            "algorithm": NSGAII,
+            "config": CfgNode({
+                "df_path": "../data/nas/nasbench101.csv",
+                "search": {
+                    "n_iter": N_ITER,
+                    "population_size": 250,
+                    "sample_size": 25
+                },
+                "disable_tqdm": "true",
+                "seed": 0
+            })
+        },
+        "Pareto-NRPA": {
+            "algorithm": ParetoNRPA,
+            "config": CfgNode({
+                "df_path": "../data/nas/nasbench101.csv",
+                "search": {
+                    "level": 3,
+                    "nrpa_alpha": 0.1,
+                    "nrpa_lr_update": False,
+                    "softmax_temp": 1,
+                    "playouts_per_selection": 1,
+                    "n_iter": N_ITER,
+                    "n_policies": 4
+                },
+                "disable_tqdm": "true",
+                "callback": "true",
+                "seed": 0
+            })
+        },
     }
 
-    for file in os.listdir(path):
-        if file.startswith("."): continue
-        SEARCH_SPACE = "tsptw_moo"
-        DATASET = file.split(".txt")[0]
-        print(f"Running NSGAII on {DATASET}...")
-        run_all(algorithms, OUTPUT_FILE)
+    run_all(algorithms, OUTPUT_FILE)

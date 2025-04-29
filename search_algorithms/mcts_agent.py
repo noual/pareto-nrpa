@@ -3,8 +3,10 @@ import json
 import sys
 
 import pandas as pd
+# from nasbench import api
 from yacs.config import CfgNode
 
+from naslib.utils import get_dataset_api
 # from monet.node import Node
 # from monet.search_spaces.nasbench101_node import NASBench101Cell
 # from monet.search_spaces.nasbench201_node import NASBench201Cell
@@ -12,10 +14,13 @@ from yacs.config import CfgNode
 # from monet.search_spaces.natsbench_node import NATSBenchSizeCell
 # from monet.search_spaces.transbench_node import TransBenchCell, TransBenchMacro
 # from monet.search_spaces.tsptw_node import TSPTWState
-# from naslib.search_spaces.core import Metric
-# from naslib.utils import get_dataset_api
+# from naslib2.search_spaces.core import Metric
+# from naslib2.utils import get_dataset_api
 
 from node import Node
+from search_spaces.nasbench101.nasbench101_node import NASBench101Cell
+from search_spaces.nasbench201.nasbench201_node import NASBench201Cell
+from search_spaces.nasbench301.nasbench301_node import DARTSState, DARTSCell
 from search_spaces.radar.radar_node import RadarCell
 from search_spaces.tsptw.tsptw_node import TSPTWState
 
@@ -49,33 +54,32 @@ class MCTSAgent:
         assert search_space in ["nasbench201", "nasbench101", "nasbench301", "natsbenchsize",
                                 "transbench101_macro", "transbench101_micro", "tsptw", "tsptw_moo", "radar"],\
             "Only NASBench301, NASBench201, NASBench101, NATS-Bench are supported"
-        # if search_space == "nasbench201":
-        #     if isinstance(self, UCT):
-        #         print(f"Reducing number of iterations")
-        #         self.n_iter = self.n_iter // 6
-        #     assert dataset in ["cifar10"], "Only CIFAR10 is supported"
-        #     self.root = Node(state=NASBench201Cell())
-        #     self.api = get_dataset_api(search_space, dataset)
+        if search_space == "nasbench201":
+            # if isinstance(self, UCT):
+            #     print(f"Reducing number of iterations")
+            #     self.n_iter = self.n_iter // 6
+            assert dataset in ["cifar10"], "Only CIFAR10 is supported"
+            self.root = Node(state=NASBench201Cell())
+            self.nadir = (100, 1531556)  # worst accuracy and biggest number of params
+
+        elif search_space == "nasbench101":
+            # if isinstance(self, UCT):
+            #     print(f"Reducing number of iterations")
+            #     self.n_iter = self.n_iter // 12
+            assert dataset in ["cifar10"], "Only CIFAR10 is supported"
+            self.root = Node(state=NASBench101Cell(7))
+            self.api = get_dataset_api(search_space, dataset)["nb101_data"]
+            if issubclass(type(self), MCTSAgent):
+                self._playout = self._playout_101
+            self.nadir = (100, 49980274)
         #
-        # elif search_space == "nasbench101":
-        #     if isinstance(self, UCT):
-        #         print(f"Reducing number of iterations")
-        #         self.n_iter = self.n_iter // 12
-        #     assert dataset in ["cifar10"], "Only CIFAR10 is supported"
-        #     self.root = Node(state=NASBench101Cell(7))
-        #     self.api = get_dataset_api(search_space, dataset)["nb101_data"]
-        #     if issubclass(type(self), MCTSAgent):
-        #         self._playout = self._playout_101
-        #
-        # elif search_space == "nasbench301":
-        #     if isinstance(self, UCT):
-        #         print(f"Reducing number of iterations")
-        #         self.n_iter = self.n_iter // 16
-        #     assert dataset in ["cifar10"], "Only CIFAR10 is supported"
-        #     self.root = Node(state= DARTSState((DARTSCell(),
-        #                                         DARTSCell()))
-        #                      )
-        #     self.api = get_dataset_api(search_space, dataset)
+        if search_space == "nasbench301":
+
+            assert dataset in ["cifar10"], "Only CIFAR10 is supported"
+            self.root = Node(state= DARTSState((DARTSCell(),
+                                                DARTSCell()))
+                             )
+            self.api = get_dataset_api(search_space, dataset)
         #
         # elif search_space == "natsbenchsize":
         #     if isinstance(self, UCT):
@@ -101,7 +105,7 @@ class MCTSAgent:
         #     self.root = Node(state=TransBenchMacro())
         #     self.api = get_dataset_api(search_space, dataset)
 
-        if search_space == "tsptw":
+        elif search_space == "tsptw":
             self.root = Node(state=TSPTWState(file=f"../data/SolomonTSPTW/{dataset}.txt"))
             self.api = None
 
