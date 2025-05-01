@@ -7,11 +7,11 @@ import numpy as np
 from pymoo.core.problem import Problem, ElementwiseProblem
 
 from search_spaces.radar.radar_dataset import RadarDavaDataset
-from utils.CIFAR import CIFAR10Dataset
-from utils.ntk.compute_score import compute_score
-from utils.ntk.naswot import NASWOT
+from utils_moo.CIFAR import CIFAR10Dataset
+from utils_moo.ntk.compute_score import compute_score
+from utils_moo.ntk.naswot import NASWOT
 
-from utils.operations import ReLUConvBN, Pooling, FactorizedReduce, Zero
+from utils_moo.operations import ReLUConvBN, Pooling, FactorizedReduce, Zero
 
 OPERATIONS = {"nor_conv_1x1": lambda C_in, C_out, stride, affine: ReLUConvBN(C_in, C_out, 1, stride, "same", affine),
               "nor_conv_3x3": lambda C_in, C_out, stride, affine: ReLUConvBN(C_in, C_out, 3, stride, "same", affine),
