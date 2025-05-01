@@ -5,7 +5,7 @@ import pandas as pd
 from pymoo.core.result import Result
 from yacs.config import CfgNode
 import sys
-
+sys.path.append("..")
 from search_algorithms.pareto_nrpa.oriented_policies_nrpa import OrientedPoliciesNRPA
 from search_algorithms.pareto_nrpa.pareto_nrpa import ParetoNRPA
 
