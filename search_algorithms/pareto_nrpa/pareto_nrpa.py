@@ -16,7 +16,7 @@ from sklearn.neighbors import KNeighborsClassifier
 
 from node import Node
 from search_algorithms.mcts_agent import MCTSAgent
-from utils.helpers import configure_seaborn
+from utils_moo.helpers import configure_seaborn
 
 configure_seaborn()
 from pymoo.core.individual import Individual
@@ -26,7 +26,7 @@ from pymoo.core.result import Result
 from pymoo.operators.survival.rank_and_crowding import RankAndCrowding
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 from tqdm import tqdm
-from nasbench import api as ModelSpecAPI
+# from nasbench import api as ModelSpecAPI
 
 # from monet.node import Node
 # from monet.search_algorithms.nested import NRPA
