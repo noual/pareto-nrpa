@@ -1,3 +1,5 @@
+import argparse
+
 import numpy as np
 import pandas as pd
 from pymoo.core.result import Result
@@ -75,13 +77,23 @@ def run_all(algo_dict, output_file="results_local"):
                     "iteration": i*(N_ITER//len(hypervolumes_)-1),
                     "hypervolume": hv_ })
         df = pd.DataFrame(all_results)
-        df.to_csv(f"results/pareto-nrpa/one_policy_paretonrpa_{SEARCH_SPACE}_{DATASET}.csv")
+        df.to_csv(f"results/pareto-nrpa/paretonrpa_{SEARCH_SPACE}_{DATASET}_L{LEVEL}_NPOL{N_POLICIES}_ALPHA{ALPHA}.csv")
         df_hv = pd.DataFrame(hypervolumes)
-        df_hv.to_csv(f"results/pareto-nrpa/one_policy_paretonrpa_{SEARCH_SPACE}_{DATASET}_hv.csv")
+        df_hv.to_csv(f"results/pareto-nrpa/paretonrpa_{SEARCH_SPACE}_{DATASET}_L{LEVEL}_NPOL{N_POLICIES}_ALPHA{ALPHA}_hv.csv")
 
 if __name__ == '__main__':
 
-    DATASET = sys.argv[1]
+    parser = argparse.ArgumentParser(description="Run multi-objective optimization algorithms.")
+    parser.add_argument("--dataset", required=True, help="Dataset name (mandatory).")
+    parser.add_argument("--npolicies", type=int, default=4, help="Number of policies (optional, default: 4).")
+    parser.add_argument("--level", type=int, default=4, help="Level parameter (optional, default: 4).")
+    parser.add_argument("--alpha", type=float, default=0.5, help="Alpha parameter (optional, default: 0.5).")
+    args = parser.parse_args()
+
+    DATASET = args.dataset
+    N_POLICIES = args.npolicies
+    LEVEL = args.level
+    ALPHA = args.alpha
     algorithms = {
 
         # "HV-Pareto-NRPA": {
@@ -140,13 +152,13 @@ if __name__ == '__main__':
             "config": CfgNode({
                 "df_path": "none",
                 "search": {
-                    "level": 4,
-                    "nrpa_alpha": .5,
+                    "level": LEVEL,
+                    "nrpa_alpha": ALPHA,
                     "nrpa_lr_update": False,
                     "softmax_temp": 1,
                     "playouts_per_selection": 1,
                     "n_iter": N_ITER,
-                    "n_policies": 4
+                    "n_policies": N_POLICIES
                 },
                 "disable_tqdm": "true",
                 "callback": "true",
