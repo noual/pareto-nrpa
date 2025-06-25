@@ -1,8 +1,7 @@
 import json
 
 import numpy as np
-from pymoo.algorithms.moo.nsga2 import NSGA2
-from pymoo.algorithms.moo.sms import SMSEMOA
+from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.core.mutation import Mutation
 from pymoo.core.population import Population
 from pymoo.core.repair import Repair
@@ -16,32 +15,31 @@ from pymoo.operators.mutation.pm import PM, mut_pm
 from pymoo.operators.repair.rounding import RoundingRepair
 from pymoo.operators.sampling.rnd import IntegerRandomSampling, PermutationRandomSampling
 from pymoo.termination import get_termination
+from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.visualization.scatter import Scatter
 from pymoo.core.callback import Callback
 from pymoo.optimize import minimize
 from pyrecorder.recorder import Recorder
 from pyrecorder.writers.streamer import Streamer
 
-from search_spaces.nasbench101.nasbench101_node import NASBench101Problem, NASBench101Sampling, NASBench101Mutation, \
-    NASBench101Crossover, NASBench101Evaluator
+# from search_spaces.nasbench101.nasbench101_node import NASBench101Problem
 from search_spaces.nasbench201.nasbench201_node import NASBench201Problem
-from search_spaces.nasbench301.nasbench301_node import NASBench301Problem, NASBench301Sampling, NASBench301Mutation, \
-    NASBench301Evaluator, NASBench301Crossover
-# from search_spaces.radar.radar_node import RadarProblem
+from search_spaces.radar.radar_node import RadarProblem
 from search_spaces.tsptw.tsptw_node import TSPTSWProblem
 
 
-class SMSEMOAAlgorithm:
+class MOEADAlgorithm:
 
     def __init__(self, config):
         self.callback = MyCallback()
-
-        self.algorithm = SMSEMOA(
-            pop_size=config.search.population_size,
+        ref_dirs = get_reference_directions("uniform", 2, n_partitions=1500)
+        self.algorithm = MOEAD(
+            ref_dirs,
+            n_neighbors=10,
+            prob_neighbor_mating=0.75,
             sampling=PermutationRandomSamplingWithBias(),
             crossover=OrderCrossover(),
             mutation=InversionMutation(),
-            eliminate_duplicates=True,
             repair=StartFromZeroRepair(),
             callback=self.callback,
             save_history=True,
@@ -53,8 +51,7 @@ class SMSEMOAAlgorithm:
 
 
     def adapt_search_space(self, search_space, dataset):
-        supported_ss = ["tsptw_moo", "radar", "nasbench201", "nasbench101", "nasbench301"]
-
+        supported_ss = ["tsptw_moo", "radar", "nasbench201", "nasbench101"]
         assert search_space in supported_ss, f"Search space {search_space} not supported. Supported search spaces: {supported_ss}"
         if search_space == "tsptw_moo":
             self.problem = TSPTSWProblem(file=f"../data/tsptw/SolomonTSPTW/{dataset}.txt")
@@ -65,10 +62,10 @@ class SMSEMOAAlgorithm:
 
         elif search_space == "nasbench201":
             self.problem = NASBench201Problem()
-            self.algorithm = SMSEMOA(
-                pop_size=250,
+            self.algorithm = NSGA2(
+                pop_size=100,
                 n_offsprings=25,
-                sampling=IntegerRandomSampling(),
+                sampling= IntegerRandomSampling(),
                 crossover=SBX(eta=20),
                 mutation=PolynomialMutation(eta=20),
                 eliminate_duplicates=True,
@@ -82,33 +79,16 @@ class SMSEMOAAlgorithm:
 
         elif search_space == "nasbench101":
             self.problem = NASBench101Problem()
-            self.algorithm = SMSEMOA(
+            self.algorithm = NSGA2(
                 pop_size=250,
                 n_offsprings=25,
-                sampling=NASBench101Sampling(),
-                crossover=NASBench101Crossover(),
-                mutation=NASBench101Mutation(),
-                eliminate_duplicates=False,
+                sampling=IntegerRandomSampling(),
+                crossover=SBX(eta=20),
+                mutation=PolynomialMutation(eta=20),
+                eliminate_duplicates=True,
+                repair=RoundingRepair(),
                 callback=self.callback,
                 save_history=True,
-                evaluator=NASBench101Evaluator()
-            )
-            self.callback.initialize(self.algorithm)
-            self.nadir = (100, 49979274)
-            self.algorithm.nadir = self.nadir
-
-        elif search_space == "nasbench301":
-            self.problem = NASBench301Problem()
-            self.algorithm = SMSEMOA(
-                pop_size=50,
-                n_offsprings=25,
-                sampling=NASBench301Sampling(),
-                crossover=NASBench301Crossover(),
-                mutation=NASBench301Mutation(),
-                eliminate_duplicates=False,
-                callback=self.callback,
-                save_history=True,
-                evaluator=NASBench301Evaluator()
             )
             self.callback.initialize(self.algorithm)
             self.nadir = (100, 49979274)
@@ -116,7 +96,7 @@ class SMSEMOAAlgorithm:
 
         elif search_space == "radar":
             self.problem = RadarProblem(dataset)
-            self.algorithm = SMSEMOA(
+            self.algorithm = NSGA2(
                 pop_size=100,
                 n_offsprings=25,
                 sampling= IntegerRandomSampling(),
@@ -128,6 +108,8 @@ class SMSEMOAAlgorithm:
                 save_history=True,
             )
             self.callback.initialize(self.algorithm)
+            self.nadir = (1e6, 1e10)  # worst accuracy and biggest number of params
+            self.algorithm.nadir = self.nadir
         # self.algorithm.setup(self.problem)
 
 
@@ -151,6 +133,7 @@ class MyCallback(Callback):
 
     def notify(self, algorithm):
         problem = algorithm.problem
+
         approx_ideal = algorithm.pop.get("F").min(axis=0)
         approx_nadir = algorithm.pop.get("F").max(axis=0)
         metric = Hypervolume(ref_point=np.array(algorithm.nadir),
@@ -158,7 +141,6 @@ class MyCallback(Callback):
                              zero_to_one=False,
                              ideal=approx_ideal,
                              nadir=approx_nadir)
-
         hv = metric.do(algorithm.pop.get("F"))
         self.data["hypervolume"].append(hv)
         scatter = Scatter("Gen %s" % algorithm.n_gen, {'pad': 30}, bounds=(problem.xl, problem.xu),)

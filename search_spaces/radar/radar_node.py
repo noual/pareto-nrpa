@@ -48,7 +48,7 @@ class NASBench201NetworkCell(nn.Module):
         self.matrix = matrix
 
     def forward(self, x):
-        for i in range(self.n_vertices):
+        for i in range(self.n_vertices-1):
             current_op = []
             for j in range(i + 1):
                 # print(f"{i}, {j}: {self.matrix[i][j]}")
@@ -75,13 +75,14 @@ class NASBench201Model(nn.Module):
 
 class NASBench201UNet(NASBench201Model):
 
-    def __init__(self, cell_str, input_size, input_depth):
+    def __init__(self, cell_str, input_size, input_depth, n_vertices=4):
 
         self.C = 16
         self.N = 5
         self.layer_channels = [self.C] * self.N + [self.C * 2] + [self.C * 2] * self.N + [self.C * 4] + [
             self.C * 4] * self.N
         self.layer_reductions = [False] * self.N + [True] + [False] * self.N + [True] + [False] * self.N
+        self.n_vertices = n_vertices
         super().__init__(cell_str, input_size, input_depth)
 
     def build_backbone(self, input_size, input_depth):
@@ -91,7 +92,7 @@ class NASBench201UNet(NASBench201Model):
 
         for lc, reduction in zip(self.layer_channels, self.layer_reductions):
             if not reduction:
-                c = NASBench201NetworkCell(self.cell_str, C_in=lc, C_out=lc, n_vertices=4)
+                c = NASBench201NetworkCell(self.cell_str, C_in=lc, C_out=lc, n_vertices=self.n_vertices)
                 self.encoder.append(c)
 
             else:
@@ -103,7 +104,7 @@ class NASBench201UNet(NASBench201Model):
 
         for lc, reduction in zip(reversed(self.layer_channels), reversed(self.layer_reductions)):
             if not reduction:
-                c = NASBench201NetworkCell(self.cell_str, C_in=lc, C_out=lc, n_vertices=4)
+                c = NASBench201NetworkCell(self.cell_str, C_in=lc, C_out=lc, n_vertices=self.n_vertices)
                 self.decoder.append(c)
             else:
                 c = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
@@ -127,7 +128,7 @@ class NASBench201UNet(NASBench201Model):
             if isinstance(self.decoder[i - 1], nn.Upsample):
                 x = torch.add(x, list(reversed(encoder_tensors))[i])
         x = self.last_conv(x)
-        x = nn.Sigmoid()(x)
+        # x = nn.Sigmoid()(x)
         return x
 
 

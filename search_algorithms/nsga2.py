@@ -107,6 +107,8 @@ class NSGAII:
                 save_history=True,
             )
             self.callback.initialize(self.algorithm)
+            self.nadir = (1e6, 1e10)  # worst accuracy and biggest number of params
+            self.algorithm.nadir = self.nadir
         # self.algorithm.setup(self.problem)
 
 

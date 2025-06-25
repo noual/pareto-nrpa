@@ -48,7 +48,8 @@ def running_avg(data, window_size):
 def configure_seaborn(**kwargs):
     sns.set_context("notebook")
     sns.set_theme(sns.plotting_context("notebook", font_scale=1), style="whitegrid")
-    palette = ["#3D405B", "#E08042", "#54AB69", "#CE2F49", "#A26EBF", "#7D4948", "#D12AA2", "#E0D06F", "#6F9AA7"]
+    palette = ["#3D405B", "#E08042", "#54AB69", "#CE2F49", "#A26EBF", "#7D4948", "#D12AA2", "#E0D06F", "#6F9AA7", "#3359C4",
+               "#76455B"]
     sns.set_palette(palette)
 
 def z_normalize(data):

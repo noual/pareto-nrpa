@@ -6,7 +6,7 @@ import pandas as pd
 # from nasbench import api
 from yacs.config import CfgNode
 
-from naslib.utils import get_dataset_api
+# from naslib.utils import get_dataset_api
 # from monet.node import Node
 # from monet.search_spaces.nasbench101_node import NASBench101Cell
 # from monet.search_spaces.nasbench201_node import NASBench201Cell
@@ -18,9 +18,9 @@ from naslib.utils import get_dataset_api
 # from naslib2.utils import get_dataset_api
 
 from node import Node
-from search_spaces.nasbench101.nasbench101_node import NASBench101Cell
+# from search_spaces.nasbench101.nasbench101_node import NASBench101Cell
 from search_spaces.nasbench201.nasbench201_node import NASBench201Cell
-from search_spaces.nasbench301.nasbench301_node import DARTSState, DARTSCell
+# from search_spaces.nasbench301.nasbench301_node import DARTSState, DARTSCell
 from search_spaces.radar.radar_node import RadarCell
 from search_spaces.tsptw.tsptw_node import TSPTWState
 
@@ -129,6 +129,8 @@ class MCTSAgent:
 
         elif search_space == "radar":
             self.root = Node(state=RadarCell(dataset))
+            self.nadir = (10000, 419980274)
+
 
     def _score_node(self, node: Node, parent: Node):
         pass

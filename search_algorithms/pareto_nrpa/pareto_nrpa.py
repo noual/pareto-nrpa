@@ -127,7 +127,7 @@ class PolicyManager:
                     # print(f"[Adapt] {node.state.path[i], move[0]}")
                     if algorithm.search_space == "tsptw_moo":
                         o[move_code] = np.exp(policy.get(move_code, 0) + algorithm.b[(node.state.path[i], move[0])])
-                    elif algorithm.search_space in ["nasbench201", "nasbench101", "nasbench301"]:
+                    elif algorithm.search_space in ["nasbench201", "nasbench101", "nasbench301", "radar"]:
                         o[move_code] = np.exp(policy.get(move_code, 0))
 
                     z += o[move_code]
