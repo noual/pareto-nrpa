@@ -77,7 +77,7 @@ def run_all(algo_dict, output_file="results_local"):
         df_hv.to_csv(f"results/{SEARCH_SPACE}_{DATASET}_hv.csv")
 
 if __name__ == '__main__':
-    DATASET = sys.argv[1]
+    DATASET = int(sys.argv[1])
     algorithms = {
         "NSGAII": {
             "algorithm": NSGAII,
