@@ -227,7 +227,7 @@ class RadarCell:
 
         self.lat_metric = "n_param"
         self.network = None
-        self.dataset_full = RadarDavaDataset(root_dir="/home/lam/projets/multi_objective/data/radar/mydb/mat", batch_size=4, has_distance=True)
+        self.dataset_full = RadarDavaDataset(root_dir="/home/lam/projets/multi_objective/data/radar/train_bth/mat", batch_size=4, has_distance=True)
         self.dataset = self.dataset_full.generate_loaders()[0]
         self.acc_metric = NASWOT(self.dataset)
 
