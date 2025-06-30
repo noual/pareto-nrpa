@@ -25,18 +25,18 @@ from pyrecorder.writers.streamer import Streamer
 # from search_spaces.nasbench101.nasbench101_node import NASBench101Problem
 from search_spaces.nasbench201.nasbench201_node import NASBench201Problem
 from search_spaces.radar.radar_node import RadarProblem
-from search_spaces.tsptw.tsptw_node import TSPTSWProblem
+from search_spaces.tsptw.tsptw_node import TSPTSWProblem, TSPProblem
 
 
 class MOEADAlgorithm:
 
     def __init__(self, config):
         self.callback = MyCallback()
-        ref_dirs = get_reference_directions("uniform", 2, n_partitions=1500)
+        ref_dirs = get_reference_directions("uniform", 2, n_partitions=2000)
         self.algorithm = MOEAD(
             ref_dirs,
             n_neighbors=10,
-            prob_neighbor_mating=0.75,
+            prob_neighbor_mating=0.8,
             sampling=PermutationRandomSamplingWithBias(),
             crossover=OrderCrossover(),
             mutation=InversionMutation(),
@@ -51,10 +51,17 @@ class MOEADAlgorithm:
 
 
     def adapt_search_space(self, search_space, dataset):
-        supported_ss = ["tsptw_moo", "radar", "nasbench201", "nasbench101"]
+        supported_ss = ["tsptw_moo", "radar", "nasbench201", "nasbench101", "tsp"]
         assert search_space in supported_ss, f"Search space {search_space} not supported. Supported search spaces: {supported_ss}"
         if search_space == "tsptw_moo":
             self.problem = TSPTSWProblem(file=f"../data/tsptw/SolomonTSPTW/{dataset}.txt")
+            with open(f"../data/tsptw/SolomonTSPTW/nadirs.json", "r") as f:
+                nadirs = json.load(f)
+            self.nadir = nadirs[dataset]
+            self.algorithm.nadir= self.nadir
+
+        elif search_space == "tsp":
+            self.problem = TSPProblem(file=f"../data/tsptw/SolomonTSPTW/{dataset}.txt")
             with open(f"../data/tsptw/SolomonTSPTW/nadirs.json", "r") as f:
                 nadirs = json.load(f)
             self.nadir = nadirs[dataset]

@@ -52,7 +52,7 @@ class MCTSAgent:
         self.search_space = search_space
         self.dataset = dataset
         assert search_space in ["nasbench201", "nasbench101", "nasbench301", "natsbenchsize",
-                                "transbench101_macro", "transbench101_micro", "tsptw", "tsptw_moo", "radar"],\
+                                "transbench101_macro", "transbench101_micro", "tsptw", "tsptw_moo", "radar", "tsp"],\
             "Only NASBench301, NASBench201, NASBench101, NATS-Bench are supported"
         if search_space == "nasbench201":
             # if isinstance(self, UCT):
@@ -119,6 +119,21 @@ class MCTSAgent:
                 for j in range(distances.shape[1]):
                     self.b[(i, j)] = -10 * (distances[i, j]-min_)/(max_-min_)
                     print(f"{i} -> {j}: {self.b[(i, j)]}")
+            with open(f"../data/tsptw/SolomonTSPTW/nadirs.json", "r") as f:
+                nadirs = json.load(f)
+            self.nadir = nadirs[dataset]
+            self.api = None
+
+        elif search_space == "tsp":
+            self.root = Node(state=TSPTWState(file=f"../data/tsptw/SolomonTSPTW/{dataset}.txt", multiobjective=True))
+            # Initialize bias for GNRPA
+            distances = self.root.state.travel_matrix
+            max_ = np.max(distances)
+            min_ = np.min(distances)
+            for i in range(distances.shape[0]):
+                for j in range(distances.shape[1]):
+                    self.b[(i, j)] = -10 * (distances[i, j]-min_)/(max_-min_)
+                    # print(f"{i} -> {j}: {self.b[(i, j)]}")
             with open(f"../data/tsptw/SolomonTSPTW/nadirs.json", "r") as f:
                 nadirs = json.load(f)
             self.nadir = nadirs[dataset]

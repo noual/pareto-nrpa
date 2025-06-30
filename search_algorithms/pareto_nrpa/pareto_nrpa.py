@@ -125,7 +125,7 @@ class PolicyManager:
                 move_codes = [algorithm._code(node, m) for m in available_moves]
                 for move, move_code in zip(available_moves, move_codes):
                     # print(f"[Adapt] {node.state.path[i], move[0]}")
-                    if algorithm.search_space == "tsptw_moo":
+                    if algorithm.search_space in ["tsptw_moo", "tsp"]:
                         o[move_code] = np.exp(policy.get(move_code, 0) + algorithm.b[(node.state.path[i], move[0])])
                     elif algorithm.search_space in ["nasbench201", "nasbench101", "nasbench301", "radar"]:
                         o[move_code] = np.exp(policy.get(move_code, 0))
@@ -225,7 +225,7 @@ class ParetoNRPA(MCTSAgent):
 
     def _code(self, node, move):
 
-        if self.search_space == "tsptw_moo":
+        if self.search_space in ["tsptw_moo", "tsp"]:
             code = node.state.path[-1] * node.state.travel_matrix.shape[0] + move[0]
             return code
 
@@ -259,7 +259,6 @@ class ParetoNRPA(MCTSAgent):
             # # Vérifier si la policy a une valeur pour ce noeud
             # if self._code(playout_node, playout_node.move) not in policy:
             #     policy[self._code(playout_node, playout_node.move)] = 0
-
             available_actions = playout_node.get_action_tuples()
             probabilities = []
             for move in available_actions:
@@ -309,7 +308,9 @@ class ParetoNRPA(MCTSAgent):
         elif self.search_space == "nasbench301":
             reward = playout_node.get_multiobjective_reward(api=self.api, metric="val_accuracy", dataset="cifar10", df=self.df)
             reward = (100-(reward[0]*100), reward[1])
-
+        elif self.search_space == "tsp":
+            reward = playout_node.get_multiobjective_reward(self.api, metric="no_penalty", dataset="cifar10", df=self.df)
+            reward = (-reward[0], -reward[1])  # Minimizing both objectives
         else:
             reward = playout_node.get_multiobjective_reward(self.api, metric=None, dataset="cifar10", df=self.df)
             reward = (-reward[0], -reward[1])  # Minimizing both objectives

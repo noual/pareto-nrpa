@@ -28,7 +28,7 @@ from search_spaces.nasbench201.nasbench201_node import NASBench201Problem
 from search_spaces.nasbench301.nasbench301_node import NASBench301Problem, NASBench301Sampling, NASBench301Mutation, \
     NASBench301Evaluator, NASBench301Crossover
 # from search_spaces.radar.radar_node import RadarProblem
-from search_spaces.tsptw.tsptw_node import TSPTSWProblem
+from search_spaces.tsptw.tsptw_node import TSPTSWProblem, TSPProblem
 
 
 class SMSEMOAAlgorithm:
@@ -53,11 +53,18 @@ class SMSEMOAAlgorithm:
 
 
     def adapt_search_space(self, search_space, dataset):
-        supported_ss = ["tsptw_moo", "radar", "nasbench201", "nasbench101", "nasbench301"]
+        supported_ss = ["tsptw_moo", "radar", "nasbench201", "nasbench101", "nasbench301", 'tsp']
 
         assert search_space in supported_ss, f"Search space {search_space} not supported. Supported search spaces: {supported_ss}"
         if search_space == "tsptw_moo":
             self.problem = TSPTSWProblem(file=f"../data/tsptw/SolomonTSPTW/{dataset}.txt")
+            with open(f"../data/tsptw/SolomonTSPTW/nadirs.json", "r") as f:
+                nadirs = json.load(f)
+            self.nadir = nadirs[dataset]
+            self.algorithm.nadir= self.nadir
+
+        elif search_space == "tsp":
+            self.problem = TSPProblem(file=f"../data/tsptw/SolomonTSPTW/{dataset}.txt")
             with open(f"../data/tsptw/SolomonTSPTW/nadirs.json", "r") as f:
                 nadirs = json.load(f)
             self.nadir = nadirs[dataset]
