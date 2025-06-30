@@ -166,6 +166,25 @@ class TSPTWState:
         :return: List of valid actions as tuples. Each action is a tuple containing the next city ID.
         """
         actions = [None for _ in range(self.travel_matrix.shape[0])]
+
+        ##### TSP NO PENALTY ###
+        actions = []
+        current_city = self.path[-1]
+        required_cities = set(self.cities_data.keys()) - {0}
+        unvisited = required_cities - self.visited
+        # print(f"Unvisited: {unvisited}")
+
+        # Check if all required cities are visited and the last city is not the depot
+        if not unvisited and current_city != 0:
+                actions.append((0,))
+                return actions
+
+        for v in range(self.travel_matrix.shape[0]):
+            if v in unvisited:
+                    actions.append((v,))
+        return actions
+        #########################
+
         nb = 0
         current_city = self.path[-1]
         required_cities = set(self.cities_data.keys()) - {0}
@@ -173,6 +192,7 @@ class TSPTWState:
         # Check if all required cities are visited and the last city is not the depot
         if not unvisited and current_city != 0:
             return [(0,)]
+
         for i in range(self.travel_matrix.shape[0]):
             if i in unvisited:
                 actions[nb] = (i,)
@@ -208,22 +228,7 @@ class TSPTWState:
                     actions[nb] = (v,)
                     nb += 1
         return actions[:nb]
-        # actions = []
-        # current_city = self.path[-1]
-        # required_cities = set(self.cities_data.keys()) - {0}
-        # unvisited = required_cities - self.visited
-        # # print(f"Unvisited: {unvisited}")
-        #
-        # # Check if all required cities are visited and the last city is not the depot
-        # if not unvisited and current_city != 0:
-        #         actions.append((0,))
-        #         return actions
-        #
-        # for v in range(self.travel_matrix.shape[0]):
-        #     if v in unvisited:
-        #         if self.current_time + self.cities_data[current_city]['service_time'] + self.travel_matrix[current_city][v] > self.cities_data[v]['time_window'][1]:
-        #             # print(f"We add ")
-        #             actions.append((v,))
+
         # # if len(actions) == 0:
         # #     for v in range(self.travel_matrix.shape[0]):
         # #         if v in unvisited:
@@ -348,6 +353,8 @@ class TSPTWState:
             secondary_score -= self.cost_matrix[from_city][to_city]
         # Reward is negative of the total time (to be maximized)
         # print(f"We have {n_violations} violations so the reward is {-self.current_time + 1e6*n_violations}.")
+        if metric == "no_penalty":
+            return score, secondary_score
         return score - 1e6*n_violations, secondary_score - 1e6*n_violations
 
 class TSPTSWProblem(ElementwiseProblem):
@@ -366,7 +373,7 @@ class TSPTSWProblem(ElementwiseProblem):
         for i in range(distances.shape[0]):
             for j in range(distances.shape[1]):
                 self.b[(i, j)] = -10 * (distances[i, j] - min_) / (max_ - min_)
-                print(f"{i} -> {j}: {self.b[(i, j)]}")
+                # print(f"{i} -> {j}: {self.b[(i, j)]}")
 
         super().__init__(n_var=n_cities,
                          n_obj=2,
@@ -432,6 +439,87 @@ class TSPTSWProblem(ElementwiseProblem):
             # print(f"City {city} visited at {arrival_time}. The time window is {e_i} - {l_i}.")
         return visit_times
 
+class TSPProblem(ElementwiseProblem):
+
+    def __init__(self, file):
+        matrix, data = parse_file(file)
+        n_cities = matrix.shape[0]
+        self.travel_matrix = matrix
+        self.cities_data = data
+        file_root = file.split("/")[-1].split(".txt")[0]
+        self.cost_matrix = np.load(f"../data/tsptw/SecondaryCost/{file_root}.npy")
+        self.b = {}
+        distances = self.travel_matrix
+        max_ = np.max(distances)
+        min_ = np.min(distances)
+        for i in range(distances.shape[0]):
+            for j in range(distances.shape[1]):
+                self.b[(i, j)] = -10 * (distances[i, j] - min_) / (max_ - min_)
+                # print(f"{i} -> {j}: {self.b[(i, j)]}")
+
+        super().__init__(n_var=n_cities,
+                         n_obj=2,
+                         xl=0,
+                         xu=n_cities-1,
+                         vtype=int)
+
+
+    def _evaluate(self, x, out, *args, **kwargs):
+        x_ = np.zeros(x.shape[0]+1, dtype=int)
+        x_[:-1] = x
+        # print(x_)
+        out["F"] = self.get_multiobjective_reward(x_)
+
+    def get_multiobjective_reward(self, x):
+        # self.get_reward2(x)
+        visit_times = self.calculate_visit_times(x)
+        n_violations = 0
+        score = 0
+        for i in range(len(x) - 1):
+            from_city = x[i]
+            to_city = x[i + 1]
+            score += self.travel_matrix[from_city][to_city]
+        # print(f"Score: {score}, current time: {self.current_time}")
+        for i, (city, time) in enumerate(visit_times):
+            if time > self.cities_data[city]['time_window'][1]:
+                n_violations += 1
+
+        secondary_score = 0
+        for i in range(len(x) - 1):
+            from_city = x[i]
+            to_city = x[i + 1]
+            secondary_score += self.cost_matrix[from_city][to_city]
+        # Reward is negative of the total time (to be maximized)
+        # print(f"We have {n_violations} violations so the reward is {-self.current_time + 1e6*n_violations}.")
+        reward = (score, secondary_score)
+        # print(reward)
+        return reward
+
+    def calculate_visit_times(self, x):
+
+        visit_times = [(0,0)]
+        for i, city in enumerate(x[:-1]):
+            city = x[i+1]
+            previous_city = x[i]
+            # print(f"Visiting city {previous_city} -> {city}.")
+            # Get travel time from city to previous city
+            travel_time = self.travel_matrix[previous_city][city]
+            # Service_time
+            service_time = self.cities_data[previous_city]["service_time"]
+            # print(f"Travelling from {previous_city} to {city} in {travel_time} time units with {service_time} service.")
+            # Calculate the time at which we leave city
+            departure_time = visit_times[i][1] + service_time
+
+            # Time at which the traveller arrives in the new city
+            arrival_time = departure_time + travel_time
+
+            # Do we have to wait for the city to open?
+            e_i, l_i = self.cities_data[city]['time_window']
+            wait_time = max(0, e_i - arrival_time)
+            arrival_time += wait_time
+            visit_times.append((city, arrival_time))
+            # print(f"City {city} visited at {arrival_time}. The time window is {e_i} - {l_i}.")
+        return visit_times
 
 if __name__ == '__main__':
     path = "/home/lam/Téléchargements/SolomonTSPTW/rc_206.1.txt"
