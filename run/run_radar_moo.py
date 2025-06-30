@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 from pymoo.core.result import Result
 from yacs.config import CfgNode
-
+import sys
+sys.path.append("..")
 from search_algorithms.nsga2 import NSGAII
 from search_algorithms.pareto_mcts import Pareto_UCT
 from search_algorithms.pareto_nrpa.oriented_policies_nrpa import OrientedPoliciesNRPA
@@ -11,12 +12,12 @@ from search_algorithms.pareto_nrpa.policy_reassignment_nrpa import ThirdIdeaNRPA
 from search_algorithms.pareto_nrpa.slice_pareto_nrpa import SliceParetoNRPA
 
 SEARCH_SPACE = "radar"
-DATASET = 8
+DATASET = 5
 
 N_RUNS = 30
 OUTPUT_FILE = "results"
 
-N_ITER = 1000
+N_ITER = 100000
 
 def run_once(algo_dict):
     rewards = {}
@@ -76,6 +77,7 @@ def run_all(algo_dict, output_file="results_local"):
         df_hv.to_csv(f"results/{SEARCH_SPACE}_{DATASET}_hv.csv")
 
 if __name__ == '__main__':
+    DATASET = sys.argv[1]
     algorithms = {
         "NSGAII": {
             "algorithm": NSGAII,
@@ -128,7 +130,7 @@ if __name__ == '__main__':
                 "df_path": "none",
                 "search": {
                     "level": 3,
-                    "nrpa_alpha": 1,
+                    "nrpa_alpha": 0.5,
                     "nrpa_lr_update": False,
                     "softmax_temp": 1,
                     "playouts_per_selection": 1,
