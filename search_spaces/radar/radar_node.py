@@ -5,6 +5,7 @@ from graphviz import Digraph
 import torch.nn as nn
 import numpy as np
 from pymoo.core.problem import Problem, ElementwiseProblem
+import torch.nn.functional as F
 
 from search_spaces.radar.radar_dataset import RadarDavaDataset
 from utils_moo.CIFAR import CIFAR10Dataset
@@ -73,63 +74,120 @@ class NASBench201Model(nn.Module):
         pass
 
 
-class NASBench201UNet(NASBench201Model):
+class NASBench201UNet(nn.Module):
 
-    def __init__(self, cell_str, input_size, input_depth, n_vertices=4):
-
-        self.C = 16
-        self.N = 5
-        self.layer_channels = [self.C] * self.N + [self.C * 2] + [self.C * 2] * self.N + [self.C * 4] + [
-            self.C * 4] * self.N
-        self.layer_reductions = [False] * self.N + [True] + [False] * self.N + [True] + [False] * self.N
+    def __init__(self, cell_str, input_size, input_depth, n_vertices=4, features=[16, 32, 64, 128]):
+        super().__init__()
+        self.cell_str = cell_str
+        self.input_size = input_size
         self.n_vertices = n_vertices
-        super().__init__(cell_str, input_size, input_depth)
+        self.downs = nn.ModuleList()
+        self.ups = nn.ModuleList()
+        self.pool = nn.MaxPool2d(2)
 
-    def build_backbone(self, input_size, input_depth):
+        # Encoder
+        for feature in features:
+            self.downs.append(NASBench201NetworkCell(self.cell_str, C_in=input_depth, C_out=feature, n_vertices=self.n_vertices))
+            input_depth = feature
 
-        self.first_conv = ReLUConvBN(input_depth, self.C, 3, 1, "same", True)
-        self.encoder = nn.ModuleList()
+        # Bottleneck
+        self.bottleneck = ReLUConvBN(features[-1], features[-1]*2, 3, 1, 1, True)
 
-        for lc, reduction in zip(self.layer_channels, self.layer_reductions):
-            if not reduction:
-                c = NASBench201NetworkCell(self.cell_str, C_in=lc, C_out=lc, n_vertices=self.n_vertices)
-                self.encoder.append(c)
+        # Decoder
+        for feature in reversed(features):
+            self.ups.append(nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+                ReLUConvBN(feature*2, feature, 1, 1, 1, True)
+            ))
+            self.ups.append(NASBench201NetworkCell(self.cell_str, C_in=feature*2, C_out=feature, n_vertices=self.n_vertices))
 
-            else:
-                c = ReLUConvBN(lc // 2, lc, 3, 2, 1, True)
-                self.encoder.append(c)
-
-        self.bottom_conv = ReLUConvBN(self.layer_channels[-1], self.layer_channels[-1], 3, 1, "same", True)
-        self.decoder = nn.ModuleList()
-
-        for lc, reduction in zip(reversed(self.layer_channels), reversed(self.layer_reductions)):
-            if not reduction:
-                c = NASBench201NetworkCell(self.cell_str, C_in=lc, C_out=lc, n_vertices=self.n_vertices)
-                self.decoder.append(c)
-            else:
-                c = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-                self.decoder.append(c)
-                c = ReLUConvBN(lc, lc // 2, 3, 1, 1, True)
-                self.decoder.append(c)
-
-        self.last_conv = nn.Conv2d(self.layer_channels[0], input_depth, 1, 1, "same")
+        # Final output
+        self.final_conv = nn.Conv2d(features[0], 1, kernel_size=1)
 
     def forward(self, x):
+        skip_connections = []
 
-        x = self.first_conv(x)
-        encoder_tensors = []
-        for i, mod in enumerate(self.encoder):
-            x = mod(x)
-            # print(f"{i} : {x.shape}")
-            encoder_tensors.append(x)
-        x = self.bottom_conv(x)
-        for i, mod in enumerate(self.decoder):
-            x = mod(x)
-            if isinstance(self.decoder[i - 1], nn.Upsample):
-                x = torch.add(x, list(reversed(encoder_tensors))[i])
-        x = self.last_conv(x)
-        # x = nn.Sigmoid()(x)
-        return x
+        for down in self.downs:
+            x = down(x)
+            skip_connections.append(x)
+            x = self.pool(x)
+
+        x = self.bottleneck(x)
+        skip_connections = skip_connections[::-1]
+
+        for idx in range(0, len(self.ups), 2):
+            x = self.ups[idx](x)
+            skip_conn = skip_connections[idx//2]
+
+            if x.shape != skip_conn.shape:
+                x = F.interpolate(x, size=skip_conn.shape[2:])
+
+            x = torch.cat((skip_conn, x), dim=1)
+            x = self.ups[idx+1](x)
+
+        return self.final_conv(x)
+
+    # def __init__(self, cell_str, input_size, input_depth, n_vertices=4):
+    #
+    #     self.C = 64
+    #     self.N = 1
+    #     self.layer_channels = [self.C] * self.N + [self.C * 2] + [self.C * 2] * self.N + [self.C * 4] + [
+    #         self.C * 4] * self.N
+    #     self.layer_reductions = [False] * self.N + [True] + [False] * self.N + [True] + [False] * self.N
+    #     self.layer_channels = [64, 128, 256, 512]
+    #     self.layer_reductions = [True, True, True, True]
+    #     print(self.layer_channels)
+    #     print(self.layer_reductions)
+    #     self.n_vertices = n_vertices
+    #     super().__init__(cell_str, input_size, input_depth)
+    #
+    # def build_backbone(self, input_size, input_depth):
+    #
+    #     self.first_conv = ReLUConvBN(input_depth, self.C, 3, 1, "same", True)
+    #     self.encoder = nn.ModuleList()
+    #
+    #     for lc, reduction in zip(self.layer_channels, self.layer_reductions):
+    #         if not reduction:
+    #             c = NASBench201NetworkCell(self.cell_str, C_in=lc, C_out=lc, n_vertices=self.n_vertices)
+    #             self.encoder.append(c)
+    #         else:
+    #             # c = ReLUConvBN(lc // 2, lc, 3, 2, 1, True)
+    #             c = NASBench201NetworkCell(self.cell_str, C_in=lc, C_out=lc*2, n_vertices=self.n_vertices)
+    #             self.encoder.append(c)
+    #             self.encoder.append(nn.MaxPool2d(2, 2))
+    #
+    #     self.bottom_conv = ReLUConvBN(self.layer_channels[-1], self.layer_channels[-1], 3, 1, "same", True)
+    #     self.decoder = nn.ModuleList()
+    #
+    #     for lc, reduction in zip(reversed(self.layer_channels), reversed(self.layer_reductions)):
+    #         if not reduction:
+    #             c = NASBench201NetworkCell(self.cell_str, C_in=lc, C_out=lc, n_vertices=self.n_vertices)
+    #             self.decoder.append(c)
+    #         else:
+    #             # c = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+    #             c = nn.ConvTranspose2d(lc, lc // 2, 3, 2, 1, 1)
+    #             self.decoder.append(c)
+    #             c = ReLUConvBN(lc, lc // 2, 3, 1, 1, True)
+    #             self.decoder.append(c)
+    #
+    #     self.last_conv = nn.Conv2d(self.layer_channels[0], input_depth, 1, 1, "same")
+    #
+    # def forward(self, x):
+    #
+    #     x = self.first_conv(x)
+    #     encoder_tensors = []
+    #     for i, mod in enumerate(self.encoder):
+    #         x = mod(x)
+    #         # print(f"{i} : {x.shape}")
+    #         encoder_tensors.append(x)
+    #     x = self.bottom_conv(x)
+    #     for i, mod in enumerate(self.decoder):
+    #         x = mod(x)
+    #         if isinstance(self.decoder[i - 1], nn.Upsample):
+    #             x = torch.add(x, list(reversed(encoder_tensors))[i])
+    #     x = self.last_conv(x)
+    #     # x = nn.Sigmoid()(x)
+    #     return x
 
 
 class NASBench201UNet_NTK(NASBench201UNet):

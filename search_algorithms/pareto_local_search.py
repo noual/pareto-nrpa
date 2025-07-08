@@ -1,4 +1,5 @@
 import json
+import time
 
 import numpy as np
 from opt_einsum.paths import optimal
@@ -14,7 +15,8 @@ from yacs.config import CfgNode
 
 from search_algorithms.mcts_agent import MCTSAgent
 from search_algorithms.nsga2 import PermutationRandomSamplingWithBias
-from search_spaces.tsptw.tsptw_node import TSPTSWProblem, TSPProblem
+from search_spaces.tsp.tsp_node import TSPProblem
+from search_spaces.tsptw.tsptw_node import TSPTSWProblem
 
 
 class ParetoLocalSearch(MCTSAgent):
@@ -24,6 +26,10 @@ class ParetoLocalSearch(MCTSAgent):
         self.sampler = PermutationRandomSamplingWithBias()
         self.fn_evaluations = 0
         self.hypervolume_history = []
+        if config.search.max_time > 0:
+            self.max_time = config.search.max_time
+        else:
+            self.max_time = 24*3600
 
 
     def adapt_search_space(self, search_space, dataset):
@@ -36,8 +42,8 @@ class ParetoLocalSearch(MCTSAgent):
                 nadirs = json.load(f)
             self.nadir = nadirs[dataset]
         elif search_space == "tsp":
-            self.problem = TSPProblem(file=f"../data/tsptw/SolomonTSPTW/{dataset}.txt")
-            with open(f"../data/tsptw/SolomonTSPTW/nadirs.json", "r") as f:
+            self.problem = TSPProblem(n_cities=int(dataset))
+            with open(f"../../data/tsp/nadirs.json", "r") as f:
                 nadirs = json.load(f)
             self.nadir = nadirs[dataset]
 
@@ -142,6 +148,9 @@ class ParetoLocalSearch(MCTSAgent):
 
             if self.fn_evaluations >= self.n_iter:
                 break
+            cur_time = time.time()
+            if cur_time - self.start_time > self.max_time:
+                break
 
         return optimal_prime
 
@@ -161,6 +170,7 @@ class ParetoLocalSearch(MCTSAgent):
         return result
 
     def main_loop(self, app=None):
+        self.start_time = time.time()
         optimal_set = self.initialize()
         result = self.pls(optimal_set)
         print(result.get("F"))
@@ -220,10 +230,14 @@ class MultiRestartParetoLocalSearch(ParetoLocalSearch):
 
             if k >= self.n_restarts:
                 break
+            cur_time = time.time()
+            if cur_time - self.start_time > self.max_time:
+                break
         return A
 
 
     def main_loop(self, app=None):
+        self.start_time = time.time()
         optimal_set = self.initialize()
         result = self.mpls(optimal_set)
         print(result.get("F"))

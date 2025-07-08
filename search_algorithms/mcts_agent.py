@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 import sys
 
 import pandas as pd
@@ -22,6 +23,7 @@ from node import Node
 from search_spaces.nasbench201.nasbench201_node import NASBench201Cell
 # from search_spaces.nasbench301.nasbench301_node import DARTSState, DARTSCell
 from search_spaces.radar.radar_node import RadarCell
+from search_spaces.tsp.tsp_node import TSPState
 from search_spaces.tsptw.tsptw_node import TSPTWState
 
 sys.path.append("..")
@@ -125,16 +127,30 @@ class MCTSAgent:
             self.api = None
 
         elif search_space == "tsp":
-            self.root = Node(state=TSPTWState(file=f"../data/tsptw/SolomonTSPTW/{dataset}.txt", multiobjective=True))
+            self.root = Node(state=TSPState(n_cities=dataset))
             # Initialize bias for GNRPA
             distances = self.root.state.travel_matrix
             max_ = np.max(distances)
             min_ = np.min(distances)
+
             for i in range(distances.shape[0]):
                 for j in range(distances.shape[1]):
-                    self.b[(i, j)] = -10 * (distances[i, j]-min_)/(max_-min_)
+                    self.b[(i, j)] = self.b.get((i, j), 0) - 10 * (distances[i, j] - min_) / (max_ - min_)
+                    self.b[(j, i)] = self.b.get((j, i), 0) - 10 * (distances[j, i] - min_) / (max_ - min_)
+
+
+            distances = self.root.state.secondary_matrix
+            max_ = np.max(distances)
+            min_ = np.min(distances)
+
+            for i in range(distances.shape[0]):
+                for j in range(distances.shape[1]):
+                    self.b[(i, j)] = self.b.get((i, j), 0) - 10 * (distances[i, j] - min_) / (max_ - min_)
+                    self.b[(j, i)] = self.b.get((j, i), 0) - 10 * (distances[j, i] - min_) / (max_ - min_)
+                    # self.b[(i, j)] = 0
                     # print(f"{i} -> {j}: {self.b[(i, j)]}")
-            with open(f"../data/tsptw/SolomonTSPTW/nadirs.json", "r") as f:
+            print(os.getcwd())
+            with open(f"../../data/tsp/nadirs.json", "r") as f:
                 nadirs = json.load(f)
             self.nadir = nadirs[dataset]
             self.api = None

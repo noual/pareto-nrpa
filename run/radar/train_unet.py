@@ -3,7 +3,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
+import sys
+import argparse
+from datetime import datetime
 
+sys.path.append('../../')
+sys.path.append('..')
 from search_spaces.radar.radar_dataset import RadarDavaDataset
 from search_spaces.radar.radar_node import NASBench201UNet
 from search_spaces.radar.unet import UNet
@@ -33,7 +38,8 @@ def evaluate(model, dataloader, criterion, device):
     return total_loss / len(dataloader)
 
 
-def train_unet(data_path, epochs=200, batch_size=8, learning_rate=1e-4):
+def train_unet(data_path, cell_str, epochs=200, batch_size=16, learning_rate=1e-4, name="model", in_features=16):
+    features = [in_features, in_features*2, in_features*4, in_features*8]
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Initialize dataset and dataloaders
@@ -41,19 +47,22 @@ def train_unet(data_path, epochs=200, batch_size=8, learning_rate=1e-4):
     train_loader, val_loader, test_loader = dataset.generate_loaders()
 
     # Initialize model, loss and optimizer
-    model = UNet(in_channels=1).to(device)
-    model = NASBench201UNet('|nor_conv_1x1~0|+|nor_conv_3x3~0|nor_conv_3x3~1|+|nor_conv_3x3~0|nor_conv_3x3~1|nor_conv_3x3~2|',
-                            input_size=128, input_depth=1, n_vertices=4)
-    model.to(device)
+    if cell_str == "unet":
+        model = UNet(in_channels=1, features=features).to(device)
+    else:
+        model = NASBench201UNet(cell_str= '|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_3x3~1|+|nor_conv_3x3~0|nor_conv_1x1~1|nor_conv_3x3~2|+|avg_pool_3x3~0|nor_conv_1x1~1|none~2|nor_conv_3x3~3|',
+                                input_size=128, input_depth=1, n_vertices=5, features=features)
+        model.to(device)
     criterion = DiceLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    writer = SummaryWriter(log_dir=f"runs/{name}")
 
     # Training loop
     best_val_loss = float('inf')
     for epoch in range(epochs):
         model.train()
         train_loss = 0
-        writer = SummaryWriter(log_dir="runs/unet_train")
+
         k = 0
         for inputs, targets in tqdm(train_loader, desc=f'Epoch {epoch + 1}/{epochs}'):
             k += 1
@@ -67,7 +76,7 @@ def train_unet(data_path, epochs=200, batch_size=8, learning_rate=1e-4):
 
             train_loss += loss.item()
 
-            if np.random.randint(50) == 7:
+            if np.random.randint(30) == 7:
                 input_img = inputs[0].detach().cpu()
                 outputs = model(inputs.to(device))
                 pred_img = torch.sigmoid(outputs[0]).detach().cpu()
@@ -76,6 +85,7 @@ def train_unet(data_path, epochs=200, batch_size=8, learning_rate=1e-4):
                 writer.add_image("Input", input_img, epoch*len(train_loader) + k, dataformats="CHW")
                 writer.add_image("Prediction", pred_img, epoch*len(train_loader) + k, dataformats="CHW")
                 writer.add_image("Label", label_img, epoch*len(train_loader) + k, dataformats="CHW")
+                writer.add_scalar('Loss/train_step', loss.item(), epoch*len(train_loader) + k)
 
 
         # Initialize tensorboard writer
@@ -97,5 +107,21 @@ def train_unet(data_path, epochs=200, batch_size=8, learning_rate=1e-4):
 
 
 if __name__ == "__main__":
-    DATA_PATH = "../../data/radar/train_bth/mat"
-    model = train_unet(DATA_PATH)
+
+    parser = argparse.ArgumentParser(description='Train UNet model')
+    parser.add_argument('--cell_str', type=str, required=True, help='Cell structure string')
+    parser.add_argument('--in_features', type=int, default=16, help='Number of input features')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
+    parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
+    parser.add_argument('--name', type=str, default=datetime.now().strftime("%d_%H_%M"), help='Run name')
+
+    args = parser.parse_args()
+    DATA_PATH = "../../data/radar/training_set/mat"
+    model = train_unet(DATA_PATH, args.cell_str, epochs=args.epochs,
+                       learning_rate=args.lr, batch_size=args.batch_size,
+                       name=args.name, in_features=args.in_features)
+    torch.save(model.state_dict(), f'./runs/{args.name}_net.pth')
+    print(
+        f"Model saved as ./runs/{args.name}_net.pth"
+    )

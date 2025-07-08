@@ -105,24 +105,31 @@ class PolicyManager:
         crowding = RankAndCrowding()
         distances = crowding.do(problem=Problem(n_constr=0), pop=optimal_set)
         dist = np.where(distances.get("crowding") == np.inf, 2, distances.get("crowding"))
+
         for elem, dis in zip(optimal_set, dist):
             # print(f"-=-=-=-=-=-=-=UPDATE-=-=-=-=-=-=-=-")
             # print(f"Policy P{elem.get('P')} ({self.weights[elem.get('P')]:.2f}) -> Element: {elem.get('F''')}")
+
             policy_index = elem.get("P")
             sequence = elem.get("X")
             policy = self.policies[policy_index]
-            policy.copy()
+
             node_type = type(algorithm.root)
             node = node_type(state=copy.deepcopy(algorithm.root.state), move=None, parent=None, sequence=[])
             node.hash = node.calculate_zobrist_hash(algorithm.root.state.zobrist_table)
             pol_prime = policy.copy()
+
             for i, action in enumerate(sequence):
+
                 best_code = algorithm._code(node, action)
+
                 pol_prime[best_code] = pol_prime.get(best_code, 0) + (self.alpha*dis)
+
                 z = 0
                 o = {}
                 available_moves = node.get_action_tuples()
                 move_codes = [algorithm._code(node, m) for m in available_moves]
+
                 for move, move_code in zip(available_moves, move_codes):
                     # print(f"[Adapt] {node.state.path[i], move[0]}")
                     if algorithm.search_space in ["tsptw_moo", "tsp"]:
@@ -136,9 +143,59 @@ class PolicyManager:
 
                 node.play_action(action)
                 node.hash = node.calculate_zobrist_hash(algorithm.root.state.zobrist_table)
-
             self.update_policy(policy_index, pol_prime)
         self.update_weights(optimal_set)
+
+    def optimized_adapt(self, optimal_set, algorithm):
+        """
+        Adapt policies based on the optimal set.
+        """
+        t0 = time.time()
+        crowding = RankAndCrowding()
+        distances = crowding.do(problem=Problem(n_constr=0), pop=optimal_set)
+        dist = np.where(distances.get("crowding") == np.inf, 2, distances.get("crowding"))
+        for elem, dis in zip(optimal_set, dist):
+            # print(f"-=-=-=-=-=-=-=UPDATE-=-=-=-=-=-=-=-")
+            # print(f"Policy P{elem.get('P')} ({self.weights[elem.get('P')]:.2f}) -> Element: {elem.get('F''')}")
+            policy_index = elem.get("P")
+            sequence = elem.get("X")
+            policy = self.policies[policy_index]
+
+            node_type = type(algorithm.root)
+            node = node_type(state=copy.deepcopy(algorithm.root.state), move=None, parent=None, sequence=[])
+            node.hash = node.calculate_zobrist_hash(algorithm.root.state.zobrist_table)
+
+            z = np.zeros(len(sequence))
+            o = {}
+            for i, action in enumerate(sequence):
+                z[i] = 0
+                available_moves = node.get_action_tuples()
+                o[i] = {}
+                move_codes = [algorithm._code(node, m) for m in available_moves]
+                for move, move_code in zip(available_moves, move_codes):
+                    if algorithm.search_space in ["tsptw_moo", "tsp"]:
+                        o[i][move_code] = np.exp(policy.get(move_code, 0) + algorithm.b[(node.state.path[i], move[0])])
+                    z[i] += o[i][move_code]
+                node.play_action(action)
+                node.hash = node.calculate_zobrist_hash(algorithm.root.state.zobrist_table)
+
+            node = node_type(state=copy.deepcopy(algorithm.root.state), move=None, parent=None, sequence=[])
+            node.hash = node.calculate_zobrist_hash(algorithm.root.state.zobrist_table)
+            for i, action in enumerate(sequence):
+                best_code = algorithm._code(node, action)
+                policy[best_code] = policy.get(best_code, 0) + (self.alpha * dis)
+                available_moves = node.get_action_tuples()
+                move_codes = [algorithm._code(node, m) for m in available_moves]
+                for move, move_code in zip(available_moves, move_codes):
+                    delta = 1 if move_code == best_code else 0
+                    policy[move_code] = policy.get(move_code, 0) + ((self.alpha * dis) * (o[i][move_code]/z[i] - delta))
+                node.play_action(action)
+                node.hash = node.calculate_zobrist_hash(algorithm.root.state.zobrist_table)
+
+            self.update_policy(policy_index, policy)
+        self.update_weights(optimal_set)
+        t1 = time.time()
+        # print(f"Adapted policies in {t1-t0:.2f} sec.")
 
     def adapt_one(self, optimal_set, algorithm):
         """
@@ -197,6 +254,10 @@ class ParetoNRPA(MCTSAgent):
         self.lr_update = config.search.nrpa_lr_update
         self.pm = PolicyManager(alpha=self.alpha)
         self.b = {}
+        if config.search.max_time > 0:
+            self.max_time = config.search.max_time
+        else:
+            self.max_time = 24 * 3600
         self.search_space = None
         self.max_pareto_set = config.search.n_policies
         self.n_iter = int(np.ceil(np.power(self.n_iter, 1 / self.level)))
@@ -207,6 +268,7 @@ class ParetoNRPA(MCTSAgent):
         self.nadir = (None, None)
         if config.callback:
             self.callback = MyCallback()
+        self.possible_moves = {}
 
     def softmax_temp_fn(self, x, tau, **kwargs):
         if "b" in kwargs:
@@ -222,6 +284,7 @@ class ParetoNRPA(MCTSAgent):
         super().adapt_search_space(search_space, dataset)
         self.search_space = search_space
         if self.root.state.zobrist_table is None: self.root.state.initialize_zobrist_table()
+        self._initialize()
 
     def _code(self, node, move):
 
@@ -234,7 +297,7 @@ class ParetoNRPA(MCTSAgent):
             return node.hash
 
         state_code = node.hash
-        # code = str(state_code)
+        code = str(state_code)
         code = ""  # J'enlève le hashage de zobrist pour le moment # justepourvoir
         for i in range(len(move)):
             code = code + str(move[i])
@@ -261,11 +324,8 @@ class ParetoNRPA(MCTSAgent):
             #     policy[self._code(playout_node, playout_node.move)] = 0
             available_actions = playout_node.get_action_tuples()
             probabilities = []
-            for move in available_actions:
-                if self._code(playout_node, move) not in policy:
-                    policy[self._code(playout_node, move)] = 0
 
-            policy_values = [policy[self._code(playout_node, move)] for move in
+            policy_values = [policy.get(self._code(playout_node, move), 0) for move in
                              available_actions]  # Calcule la probabilité de sélectionner chaque action avec la policy
             b = None
             if hasattr(self, "b"):
@@ -310,7 +370,7 @@ class ParetoNRPA(MCTSAgent):
             reward = (100-(reward[0]*100), reward[1])
         elif self.search_space == "tsp":
             reward = playout_node.get_multiobjective_reward(self.api, metric="no_penalty", dataset="cifar10", df=self.df)
-            reward = (-reward[0], -reward[1])  # Minimizing both objectives
+            reward = (reward[0], reward[1])  # Minimizing both objectives
         else:
             reward = playout_node.get_multiobjective_reward(self.api, metric=None, dataset="cifar10", df=self.df)
             reward = (-reward[0], -reward[1])  # Minimizing both objectives
@@ -416,7 +476,6 @@ class ParetoNRPA(MCTSAgent):
             # Choose a random policy and perform a playout
             p = np.random.choice(list(self.pm.policies.keys()),
                                  )#p=self.softmax_temp_fn(np.array(list(policy_manager.weights.values())), 1))
-
             new_individual, sequence = self.next(p, policy_manager)
 
             new_individual.set("P", p)
@@ -458,8 +517,13 @@ class ParetoNRPA(MCTSAgent):
         else:
             optimal_set = Population()
             for i in range(self.n_iter):
+                timer = time.time()
+                if timer - self.start_time > self.max_time:
+                    return optimal_set
                 if level == 1:  # Avoid useless policy copy for playout level 0
+                    t2=time.time()
                     result = self.nrpa(node, level - 1, policy_manager, optimal_set)
+                    t3 = time.time()
                 else:
                     pm_copy = policy_manager.copy()
                     result = self.nrpa(node, level - 1, pm_copy, optimal_set)
@@ -471,6 +535,7 @@ class ParetoNRPA(MCTSAgent):
                 #     print([[round(float(s), 2) for s in e.get("F")] for e in result])
                 #     print(f"Our current optimal set ({len(optimal_set)}) is :")
                 #     print([[round(float(s), 2) for s in e.get("F")] for e in optimal_set])
+                t4 = time.time()
                 optimal_set = Population.merge(optimal_set, result)
                 # Non-dominated sorting
                 nds = NonDominatedSorting()
@@ -504,11 +569,12 @@ class ParetoNRPA(MCTSAgent):
                 #endregion
 
                 optimal_set = optimal_set[indexes]
+                t5 = time.time()
 
+                t6 = time.time()
                 policy_manager.adapt(optimal_set, self)
-
-                # if level == self.level:
-                #     self.callback(self, optimal_set)
+                if level == self.level:
+                    self.callback(self, optimal_set)
             # if level == 1:
             #     print(optimal_set)
             return optimal_set
@@ -533,7 +599,7 @@ class ParetoNRPA(MCTSAgent):
         pol = {}
         print(self.n_iter, self.level)
         self.pbar = tqdm(total=self.n_iter ** self.level, position=0, leave=True)
-        t1 = time.time()
+        self.start_time = time.time()
         optimal_set = self.nrpa(node, self.level, self.pm, self.alpha)
         t2 = time.time()
         self.pbar.close()

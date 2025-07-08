@@ -25,14 +25,15 @@ from pyrecorder.writers.streamer import Streamer
 # from search_spaces.nasbench101.nasbench101_node import NASBench101Problem
 from search_spaces.nasbench201.nasbench201_node import NASBench201Problem
 from search_spaces.radar.radar_node import RadarProblem
-from search_spaces.tsptw.tsptw_node import TSPTSWProblem, TSPProblem
+from search_spaces.tsp.tsp_node import TSPProblem
+from search_spaces.tsptw.tsptw_node import TSPTSWProblem
 
 
 class MOEADAlgorithm:
 
     def __init__(self, config):
         self.callback = MyCallback()
-        ref_dirs = get_reference_directions("uniform", 2, n_partitions=2000)
+        ref_dirs = get_reference_directions("uniform", 2, n_partitions=200)
         self.algorithm = MOEAD(
             ref_dirs,
             n_neighbors=10,
@@ -47,8 +48,9 @@ class MOEADAlgorithm:
 
         self.callback.initialize(self.algorithm)
         self.algorithm.hypervolume_history = []
-        self.termination = get_termination("n_eval", config.search.n_iter)
-
+        self.termination = get_termination("time",
+                                           f"{int(config.search.max_time // 3600):02d}:{int((config.search.max_time % 3600) // 60):02d}:{int(config.search.max_time % 60):02d}") if config.search.max_time > 0 else get_termination(
+            "n_eval", config.search.n_iter)
 
     def adapt_search_space(self, search_space, dataset):
         supported_ss = ["tsptw_moo", "radar", "nasbench201", "nasbench101", "tsp"]
@@ -61,8 +63,8 @@ class MOEADAlgorithm:
             self.algorithm.nadir= self.nadir
 
         elif search_space == "tsp":
-            self.problem = TSPProblem(file=f"../data/tsptw/SolomonTSPTW/{dataset}.txt")
-            with open(f"../data/tsptw/SolomonTSPTW/nadirs.json", "r") as f:
+            self.problem = TSPProblem(n_cities=int(dataset))
+            with open(f"../../data/tsp/nadirs.json", "r") as f:
                 nadirs = json.load(f)
             self.nadir = nadirs[dataset]
             self.algorithm.nadir= self.nadir

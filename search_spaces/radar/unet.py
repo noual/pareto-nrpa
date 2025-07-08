@@ -34,7 +34,11 @@ class UNet(nn.Module):
 
         # Decoder
         for feature in reversed(features):
-            self.ups.append(nn.ConvTranspose2d(feature*2, feature, kernel_size=2, stride=2))
+            self.ups.append(nn.Sequential(
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+                DoubleConv(feature*2, feature)
+            ))
+            # self.ups.append(nn.ConvTranspose2d(feature*2, feature, kernel_size=2, stride=2))
             self.ups.append(DoubleConv(feature*2, feature))
 
         # Final output

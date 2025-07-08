@@ -7,20 +7,14 @@ from yacs.config import CfgNode
 import sys
 
 
+sys.path.append("../..")
 sys.path.append("..")
 
-from search_algorithms.moead import MOEADAlgorithm
-from search_algorithms.pareto_local_search import ParetoLocalSearch, MultiRestartParetoLocalSearch
-
 from search_algorithms.pareto_nrpa.pareto_nrpa import ParetoNRPA
-
-from search_algorithms.nsga2 import NSGAII
-from search_algorithms.sms_emoa import SMSEMOAAlgorithm
-
 N_RUNS = 30
-OUTPUT_FILE = "results"
+OUTPUT_FILE = "../results"
 
-N_ITER = 40000
+N_ITER = 100000
 
 def run_once(algo_dict):
     rewards = {}
@@ -75,66 +69,26 @@ def run_all(algo_dict, output_file="results_local"):
                     "iteration": i*(N_ITER//len(hypervolumes_)-1),
                     "hypervolume": hv_ })
         df = pd.DataFrame(all_results)
-        df.to_csv(f"results/motsp/motsp_{SEARCH_SPACE}_{DATASET}.csv")
+        df.to_csv(f"../results/motsp/motsp_nrpa_{SEARCH_SPACE}_{DATASET}.csv")
         df_hv = pd.DataFrame(hypervolumes)
-        df_hv.to_csv(f"results/motsp/motsp_{SEARCH_SPACE}_{DATASET}_hv.csv")
+        df_hv.to_csv(f"../results/motsp/motsp_nrpa_{SEARCH_SPACE}_{DATASET}_hv.csv")
 
 if __name__ == '__main__':
-    path = "../data/tsptw/SolomonTSPTW"
+    path = "../../data/tsptw/SolomonTSPTW"
     algorithms = {
-    "PLS": {
-        "algorithm": ParetoLocalSearch,
-        "config": CfgNode({
-            "df_path": "none",
-            "search": {
-                "n_iter": int(50*N_ITER),
-                "population_size": 250,
-                "sample_size": 25,
-                "playouts_per_selection": 1,
-            },
-            "disable_tqdm": "false",
-            "seed": 0
-        })
-    },
-    "MPLS": {
-        "algorithm": MultiRestartParetoLocalSearch,
-        "config": CfgNode({
-            "df_path": "none",
-            "search": {
-                "n_iter": int(50*N_ITER),
-                "population_size": 250,
-                "sample_size": 25,
-                "playouts_per_selection": 1,
-                "n_restarts": 25
-            },
-            "disable_tqdm": "false",
-            "seed": 0
-        })
-    },
-    "MOEAD": {
-        "algorithm": MOEADAlgorithm,
-        "config": CfgNode({
-            "df_path": "none",
-            "search": {
-                "n_iter": int(36*N_ITER),
-                "population_size": 250,
-                "sample_size": 25
-            },
-            "disable_tqdm": "false",
-            "seed": 0
-        })
-    },
+
     "Pareto-NRPA": {
         "algorithm": ParetoNRPA,
         "config": CfgNode({
             "df_path": "none",
             "search": {
-                "level": 3,
+                "level": 4,
                 "nrpa_alpha": 0.5,
                 "nrpa_lr_update": False,
                 "softmax_temp": 1,
                 "playouts_per_selection": 1,
                 "n_iter": N_ITER,
+                "max_time": 0,
                 "n_policies": 4
             },
             "disable_tqdm": "true",
@@ -142,41 +96,8 @@ if __name__ == '__main__':
             "seed": 0
         })
     },
-    "NSGAII": {
-        "algorithm": NSGAII,
-        "config": CfgNode({
-            "df_path": "none",
-            "search": {
-                "n_iter": int(3*N_ITER),
-                "population_size": 250,
-                "sample_size": 25
-            },
-            "disable_tqdm": "false",
-            "seed": 0
-        })
-    },
-    "SMS-EMOA": {
-        "algorithm": SMSEMOAAlgorithm,
-        "config": CfgNode({
-            "df_path": "none",
-            "search": {
-                "n_iter": int(11*N_ITER),
-                "population_size": 250,
-                "sample_size": 25
-            },
-            "disable_tqdm": "false",
-            "seed": 0
-        })
-    },
-
     }
 
     SEARCH_SPACE = "tsp"
     DATASET = sys.argv[1]
     run_all(algorithms, OUTPUT_FILE)
-    # for file in os.listdir(path):
-    #     if file.startswith("."): continue
-    #     SEARCH_SPACE = "tsptw_moo"
-    #     DATASET = file.split(".txt")[0]
-    #     print(f"Running NSGAII on {DATASET}...")
-    #     run_all(algorithms, OUTPUT_FILE)
