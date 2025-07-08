@@ -78,6 +78,7 @@ def run_all(algo_dict, output_file="results_local"):
 
 if __name__ == '__main__':
     DATASET = int(sys.argv[1])
+    N_ITER = int(sys.argv[2])
     algorithms = {
         "NSGAII": {
             "algorithm": NSGAII,
