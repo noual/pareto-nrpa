@@ -21,7 +21,7 @@ from search_algorithms.sms_emoa import SMSEMOAAlgorithm
 N_RUNS = 30
 OUTPUT_FILE = "../results"
 
-N_ITER = 30000
+N_ITER = 100000
 
 def run_once(algo_dict):
     rewards = {}
@@ -128,25 +128,6 @@ if __name__ == '__main__':
             "seed": 0
         })
     },
-    "Pareto-NRPA": {
-        "algorithm": ParetoNRPA,
-        "config": CfgNode({
-            "df_path": "none",
-            "search": {
-                "level": 3,
-                "nrpa_alpha": 0.5,
-                "nrpa_lr_update": False,
-                "softmax_temp": 1,
-                "playouts_per_selection": 1,
-                "n_iter": N_ITER,
-                "max_time": 0,
-                "n_policies": 4
-            },
-            "disable_tqdm": "true",
-            "callback": "true",
-            "seed": 0
-        })
-    },
     "NSGAII": {
         "algorithm": NSGAII,
         "config": CfgNode({
@@ -167,7 +148,7 @@ if __name__ == '__main__':
             "df_path": "none",
             "search": {
                 "n_iter": int(N_ITER),
-                "max_time": 30,
+                "max_time": 0,
                 "population_size": 250,
                 "sample_size": 25
             },
