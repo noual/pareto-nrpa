@@ -1,3 +1,4 @@
+import argparse
 import os
 
 import numpy as np
@@ -21,7 +22,7 @@ from search_algorithms.sms_emoa import SMSEMOAAlgorithm
 N_RUNS = 30
 OUTPUT_FILE = "../results"
 
-N_ITER = 100000
+N_ITER = 1e7
 
 def run_once(algo_dict):
     rewards = {}
@@ -81,6 +82,10 @@ def run_all(algo_dict, output_file="results_local"):
         df_hv.to_csv(f"../results/motsp/motsp_{SEARCH_SPACE}_{DATASET}_hv.csv")
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('dataset', type=str, help='Dataset name')
+    parser.add_argument('--max_time', type=int, default=0, help='Maximum time limit (default: 0)')
+    args = parser.parse_args()
     path = "../../data/tsptw/SolomonTSPTW"
     algorithms = {
     "PLS": {
@@ -89,7 +94,7 @@ if __name__ == '__main__':
             "df_path": "none",
             "search": {
                 "n_iter": int(N_ITER),
-                "max_time": 0,
+                "max_time": args.max_time,
                 "population_size": 250,
                 "sample_size": 25,
                 "playouts_per_selection": 1,
@@ -104,7 +109,7 @@ if __name__ == '__main__':
             "df_path": "none",
             "search": {
                 "n_iter": int(N_ITER),
-                "max_time": 0,
+                "max_time": args.max_time,
                 "population_size": 250,
                 "sample_size": 25,
                 "playouts_per_selection": 1,
@@ -120,7 +125,7 @@ if __name__ == '__main__':
             "df_path": "none",
             "search": {
                 "n_iter": int(N_ITER),
-                "max_time": 0,
+                "max_time": args.max_time,
                 "population_size": 250,
                 "sample_size": 25
             },
@@ -134,7 +139,7 @@ if __name__ == '__main__':
             "df_path": "none",
             "search": {
                 "n_iter": int(N_ITER),
-                "max_time": 0,
+                "max_time": args.max_time,
                 "population_size": 250,
                 "sample_size": 25
             },
@@ -148,7 +153,7 @@ if __name__ == '__main__':
             "df_path": "none",
             "search": {
                 "n_iter": int(N_ITER),
-                "max_time": 0,
+                "max_time": args.max_time,
                 "population_size": 250,
                 "sample_size": 25
             },
@@ -160,5 +165,5 @@ if __name__ == '__main__':
     }
 
     SEARCH_SPACE = "tsp"
-    DATASET = sys.argv[1]
+    DATASET = args.dataset
     run_all(algorithms, OUTPUT_FILE)

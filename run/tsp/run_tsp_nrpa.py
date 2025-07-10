@@ -1,4 +1,5 @@
 import os
+import argparse
 
 import numpy as np
 import pandas as pd
@@ -74,30 +75,34 @@ def run_all(algo_dict, output_file="results_local"):
         df_hv.to_csv(f"../results/motsp/motsp_nrpa_{SEARCH_SPACE}_{DATASET}_hv.csv")
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('dataset', type=str, help='Dataset name')
+    parser.add_argument('--max_time', type=int, default=0, help='Maximum time limit (default: 0)')
+    args = parser.parse_args()
+
     path = "../../data/tsptw/SolomonTSPTW"
     algorithms = {
-
-    "Pareto-NRPA": {
-        "algorithm": ParetoNRPA,
-        "config": CfgNode({
-            "df_path": "none",
-            "search": {
-                "level": 4,
-                "nrpa_alpha": 0.5,
-                "nrpa_lr_update": False,
-                "softmax_temp": 1,
-                "playouts_per_selection": 1,
-                "n_iter": N_ITER,
-                "max_time": 0,
-                "n_policies": 4
-            },
-            "disable_tqdm": "true",
-            "callback": "true",
-            "seed": 0
-        })
-    },
+        "Pareto-NRPA": {
+            "algorithm": ParetoNRPA,
+            "config": CfgNode({
+                "df_path": "none",
+                "search": {
+                    "level": 4,
+                    "nrpa_alpha": 0.5,
+                    "nrpa_lr_update": False,
+                    "softmax_temp": 1,
+                    "playouts_per_selection": 1,
+                    "n_iter": N_ITER,
+                    "max_time": args.max_time,
+                    "n_policies": 4
+                },
+                "disable_tqdm": "true",
+                "callback": "true",
+                "seed": 0
+            })
+        },
     }
 
     SEARCH_SPACE = "tsp"
-    DATASET = sys.argv[1]
+    DATASET = args.dataset
     run_all(algorithms, OUTPUT_FILE)
