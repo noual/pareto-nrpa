@@ -77,14 +77,15 @@ def run_all(algo_dict, output_file="results_local"):
                     "iteration": i*(N_ITER//len(hypervolumes_)-1),
                     "hypervolume": hv_ })
         df = pd.DataFrame(all_results)
-        df.to_csv(f"../results/motsp/motsp_{SEARCH_SPACE}_{DATASET}.csv")
+        df.to_csv(f"../results/motsp/motsp_{output_file}_{SEARCH_SPACE}_{DATASET}.csv")
         df_hv = pd.DataFrame(hypervolumes)
-        df_hv.to_csv(f"../results/motsp/motsp_{SEARCH_SPACE}_{DATASET}_hv.csv")
+        df_hv.to_csv(f"../results/motsp/motsp_{output_file}_{SEARCH_SPACE}_{DATASET}_hv.csv")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset', type=str, help='Dataset name')
     parser.add_argument('--max_time', type=int, default=0, help='Maximum time limit (default: 0)')
+    parser.add_argument('--output_file', type=str, default="results", help="Output file")
     args = parser.parse_args()
     path = "../../data/tsptw/SolomonTSPTW"
     algorithms = {
@@ -166,4 +167,4 @@ if __name__ == '__main__':
 
     SEARCH_SPACE = "tsp"
     DATASET = args.dataset
-    run_all(algorithms, OUTPUT_FILE)
+    run_all(algorithms, args.output_file)
