@@ -261,6 +261,8 @@ class ParetoNRPA(MCTSAgent):
         self.search_space = None
         self.max_pareto_set = config.search.n_policies
         self.n_iter = int(np.ceil(np.power(self.n_iter, 1 / self.level)))
+        if self.max_time > 0:
+            self.n_iter = int(np.ceil(np.power(120*self.max_time, 1 / self.level)))
         self.hypervolume_history = []
         self.advancement = 0
         self.anytime_pareto_set = Population()  # Used to keep track of the pareto set at any iteration for metric calculations
@@ -371,6 +373,9 @@ class ParetoNRPA(MCTSAgent):
         elif self.search_space == "tsp":
             reward = playout_node.get_multiobjective_reward(self.api, metric="no_penalty", dataset="cifar10", df=self.df)
             reward = (reward[0], reward[1])  # Minimizing both objectives
+        elif self.search_space == "radar":
+            reward = playout_node.get_multiobjective_reward(self.api, metric=None, dataset="cifar10", df=self.df)
+            reward = (-reward[0], reward[1])
         else:
             reward = playout_node.get_multiobjective_reward(self.api, metric=None, dataset="cifar10", df=self.df)
             reward = (-reward[0], -reward[1])  # Minimizing both objectives

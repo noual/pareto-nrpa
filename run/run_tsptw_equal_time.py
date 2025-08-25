@@ -6,18 +6,19 @@ from pymoo.core.result import Result
 from yacs.config import CfgNode
 import sys
 
-
 sys.path.append("..")
-from search_algorithms.pareto_local_search import ParetoLocalSearch, MultiRestartParetoLocalSearch
 
+from search_algorithms.pareto_local_search import ParetoLocalSearch, MultiRestartParetoLocalSearch
 from search_algorithms.nsga2 import NSGAII
 from search_algorithms.sms_emoa import SMSEMOAAlgorithm
 from search_algorithms.moead import MOEADAlgorithm
+from search_algorithms.pareto_mcts import Pareto_UCT
+from search_algorithms.pareto_nrpa.pareto_nrpa import ParetoNRPA
 
 N_RUNS = 30
 OUTPUT_FILE = "results"
 
-N_ITER = 100000
+N_ITER = 100000000
 
 def run_once(algo_dict):
     rewards = {}
@@ -72,13 +73,49 @@ def run_all(algo_dict, output_file="results_local"):
                     "iteration": i*(N_ITER//len(hypervolumes_)-1),
                     "hypervolume": hv_ })
         df = pd.DataFrame(all_results)
-        df.to_csv(f"results/pls/pls_{SEARCH_SPACE}_{DATASET}.csv")
+        df.to_csv(f"results/equal_time/{SEARCH_SPACE}_{DATASET}_equal_time.csv")
         df_hv = pd.DataFrame(hypervolumes)
-        df_hv.to_csv(f"results/pls/pls_{SEARCH_SPACE}_{DATASET}_hv.csv")
+        df_hv.to_csv(f"results/equal_time/{SEARCH_SPACE}_{DATASET}_equal_time_hv.csv")
 
 if __name__ == '__main__':
     path = "../data/tsptw/SolomonTSPTW"
     algorithms = {
+    "Pareto-NRPA": {
+        "algorithm": ParetoNRPA,
+        "config": CfgNode({
+            "df_path": "none",
+            "search": {
+                "level": 4,
+                "nrpa_alpha": .5,
+                "nrpa_lr_update": False,
+                "softmax_temp": 1,
+                "playouts_per_selection": 1,
+                "n_iter": N_ITER,
+                "n_policies": 4,
+                "max_time": 240,
+            },
+            "disable_tqdm": "true",
+            "callback": "true",
+            "seed": 0
+        })
+    },
+    "Pareto-MCTS": {
+        "algorithm": Pareto_UCT,
+        "config": CfgNode({
+            "df_path": "none",
+            "search": {
+                "n_iter": N_ITER // 4,
+                "population_size": 250,
+                "sample_size": 25,
+                "max_time": 240,
+                "playouts_per_selection": 4,
+                "C": 1.0,
+            },
+            "callback": True,
+            "disable_tqdm": "false",
+            "seed": 0
+        })
+    },
     "PLS": {
         "algorithm": ParetoLocalSearch,
         "config": CfgNode({
@@ -88,7 +125,7 @@ if __name__ == '__main__':
                 "population_size": 250,
                 "sample_size": 25,
                 "playouts_per_selection": 1,
-                "max_time": 0
+                "max_time": 240
             },
             "disable_tqdm": "false",
             "seed": 0
@@ -103,8 +140,50 @@ if __name__ == '__main__':
                 "population_size": 250,
                 "sample_size": 25,
                 "playouts_per_selection": 1,
-                "max_time": 0,
+                "max_time": 240,
                 "n_restarts": 25
+            },
+            "disable_tqdm": "false",
+            "seed": 0
+        })
+    },
+    "NSGAII": {
+        "algorithm": NSGAII,
+        "config": CfgNode({
+            "df_path": "none",
+            "search": {
+                "n_iter": N_ITER,
+                "population_size": 250,
+                "sample_size": 25,
+                "max_time": 240,
+            },
+            "disable_tqdm": "false",
+            "seed": 0
+        })
+    },
+    "SMS-EMOA": {
+        "algorithm": SMSEMOAAlgorithm,
+        "config": CfgNode({
+            "df_path": "none",
+            "search": {
+                "n_iter": N_ITER,
+                "population_size": 250,
+                "sample_size": 25,
+                "max_time": 240,
+            },
+            "disable_tqdm": "false",
+            "seed": 0
+        })
+    },
+    "MOEAD": {
+        "algorithm": MOEADAlgorithm,
+        "config": CfgNode({
+            "df_path": "none",
+            "search": {
+                "n_iter": N_ITER,
+                "population_size": 250,
+                "sample_size": 25,
+                "max_time": 240,
             },
             "disable_tqdm": "false",
             "seed": 0

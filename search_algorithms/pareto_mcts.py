@@ -26,6 +26,10 @@ class Pareto_UCT(MCTSAgent):
         self.optimal_set = Population()
         if config.callback:
             self.callback = MyCallback()
+        if config.search.max_time > 0:
+            self.max_time = config.search.max_time
+        else:
+            self.max_time = 24 * 3600
 
     def _score_node(self, child: Node, parent: Node, C=None):
         # Returns UCB score for a child node
@@ -165,8 +169,12 @@ class Pareto_UCT(MCTSAgent):
         """Enregistrer les paramètres de la simulation dans le folder"""
         node = self.root
         print(self.n_iter)
+        self.start_time = time.time()
         for i in tqdm(range(self.n_iter)):
             t0 = time.time()
+            timer = time.time()
+            if timer - self.start_time > self.max_time:
+                return self.result(self.optimal_set)
             leaf_node = self._selection(self.root)
             t1 = time.time()
             expanded_node = self._expansion(leaf_node)
