@@ -22,7 +22,8 @@ from pymoo.optimize import minimize
 from pyrecorder.recorder import Recorder
 from pyrecorder.writers.streamer import Streamer
 
-# from search_spaces.nasbench101.nasbench101_node import NASBench101Problem
+from search_spaces.nasbench101.nasbench101_node import NASBench101Problem, NASBench101Sampling, NASBench101Crossover, \
+    NASBench101Mutation, NASBench101Evaluator
 from search_spaces.nasbench201.nasbench201_node import NASBench201Problem
 from search_spaces.radar.radar_node import RadarProblem
 from search_spaces.tsp.tsp_node import TSPProblem
@@ -71,9 +72,11 @@ class MOEADAlgorithm:
 
         elif search_space == "nasbench201":
             self.problem = NASBench201Problem()
-            self.algorithm = NSGA2(
-                pop_size=100,
-                n_offsprings=25,
+            ref_dirs = get_reference_directions("uniform", 2, n_partitions=200)
+            self.algorithm = MOEAD(
+                ref_dirs,
+                n_neighbors=10,
+                prob_neighbor_mating=0.8,
                 sampling= IntegerRandomSampling(),
                 crossover=SBX(eta=20),
                 mutation=PolynomialMutation(eta=20),
@@ -88,16 +91,17 @@ class MOEADAlgorithm:
 
         elif search_space == "nasbench101":
             self.problem = NASBench101Problem()
-            self.algorithm = NSGA2(
-                pop_size=250,
-                n_offsprings=25,
-                sampling=IntegerRandomSampling(),
-                crossover=SBX(eta=20),
-                mutation=PolynomialMutation(eta=20),
-                eliminate_duplicates=True,
-                repair=RoundingRepair(),
+            ref_dirs = get_reference_directions("uniform", 2, n_partitions=200)
+            self.algorithm = MOEAD(
+                ref_dirs,
+                n_neighbors=10,
+                prob_neighbor_mating=0.8,
+                sampling=NASBench101Sampling(),
+                crossover=NASBench101Crossover(),
+                mutation=NASBench101Mutation(),
                 callback=self.callback,
                 save_history=True,
+                evaluator=NASBench101Evaluator()
             )
             self.callback.initialize(self.algorithm)
             self.nadir = (100, 49979274)

@@ -8,11 +8,13 @@ from pymoo.core.problem import Problem, ElementwiseProblem
 import torch.nn.functional as F
 
 from search_spaces.radar.radar_dataset import RadarDavaDataset
+from search_spaces.radar.unet import DoubleConv
 from utils_moo.CIFAR import CIFAR10Dataset
 from utils_moo.ntk.compute_score import compute_score
 from utils_moo.ntk.naswot import NASWOT
+from utils_moo.ntk.zen_nas import ZenNAS
 
-from utils_moo.operations import ReLUConvBN, Pooling, FactorizedReduce, Zero
+from utils_moo.operations import ReLUConvBN, Pooling, FactorizedReduce, Zero, ReLUDepthwiseConvBN
 
 OPERATIONS = {"nor_conv_1x1": lambda C_in, C_out, stride, affine: ReLUConvBN(C_in, C_out, 1, stride, "same", affine),
               "nor_conv_3x3": lambda C_in, C_out, stride, affine: ReLUConvBN(C_in, C_out, 3, stride, "same", affine),
@@ -20,6 +22,7 @@ OPERATIONS = {"nor_conv_1x1": lambda C_in, C_out, stride, affine: ReLUConvBN(C_i
               "avg_pool_3x3": lambda C_in, C_out, stride, affine: Pooling(C_in, C_out, stride, "avg", affine),
               "skip_connect": lambda C_in, C_out, stride, affine: nn.Identity() if stride == 1 and C_in == C_out
               else FactorizedReduce(C_in, C_out, stride, affine),
+              "dep_conv_3x3": lambda C_in, C_out, stride, affine: ReLUDepthwiseConvBN(C_in, C_out, 3, stride, "same", affine),
               }
 
 
@@ -27,10 +30,12 @@ class NASBench201NetworkCell(nn.Module):
 
     def __init__(self, cell_str, C_in, C_out, n_vertices=4):
         super().__init__()
+        # print(cell_str)
         self.n_vertices = n_vertices
         self.C_in = C_in
         self.C_out = C_out
         self.matrix = None
+        self.reduce = FactorizedReduce(self.C_in, self.C_out, 1, True)
         self.build(cell_str)
 
     def build(self, cell_str):
@@ -39,39 +44,34 @@ class NASBench201NetworkCell(nn.Module):
         for i, connexion in enumerate(connexions):
             row = nn.ModuleList()
             list_c = [x for x in connexion.split("|") if x]
+
             for j, operation in enumerate(list_c):
                 op, idx = operation.split('~')
-                if i == 0:
+
+                if j == 0:
                     row.append(OPERATIONS[op](self.C_in, self.C_out, stride=1, affine=True))
                 else:
                     row.append(OPERATIONS[op](self.C_out, self.C_out, stride=1, affine=True))
+            # print(f"Row {i}: {row}")
             matrix.append(row)
         self.matrix = matrix
 
     def forward(self, x):
+        next_x = [x]
         for i in range(self.n_vertices-1):
-            current_op = []
-            for j in range(i + 1):
-                # print(f"{i}, {j}: {self.matrix[i][j]}")
-                element = self.matrix[i][j]
-                current_op.append(element(x))
-            x = torch.stack(current_op, dim=0).sum(dim=0)
+            node_results = []
+            for j in range(i+1):
+                operation = self.matrix[i][j]
+                op_result = operation(next_x[j])
+                node_results.append(op_result)
+            node_result = torch.sum(torch.stack(node_results), dim=0)
+            next_x.append(node_result)
+        return next_x[-1]
 
-        return x
+import torch
+from torch import nn
 
-
-class NASBench201Model(nn.Module):
-
-    def __init__(self, cell_str, input_size, input_depth):
-        super().__init__()
-        self.cell_str = cell_str
-        self.backbone = self.build_backbone(input_size, input_depth)
-
-    def build_backbone(self, input_size, input_depth):
-        pass
-
-    def forward(self):
-        pass
+from utils_moo.operations import ReLUConvBN
 
 
 class NASBench201UNet(nn.Module):
@@ -84,14 +84,18 @@ class NASBench201UNet(nn.Module):
         self.downs = nn.ModuleList()
         self.ups = nn.ModuleList()
         self.pool = nn.MaxPool2d(2)
+        self.input_conv = nn.Sequential(nn.Conv2d(input_depth, features[0], kernel_size=3, stride=1, padding=1),
+                                        nn.BatchNorm2d(features[0]),)
 
         # Encoder
+        input_depth = features[0]
         for feature in features:
             self.downs.append(NASBench201NetworkCell(self.cell_str, C_in=input_depth, C_out=feature, n_vertices=self.n_vertices))
             input_depth = feature
 
         # Bottleneck
-        self.bottleneck = ReLUConvBN(features[-1], features[-1]*2, 3, 1, 1, True)
+        self.bottleneck = DoubleConv(features[-1], features[-1]*2)
+        # self.bottleneck = NASBench201NetworkCell(self.cell_str, C_in=features[-1], C_out=features[-1]*2, n_vertices=self.n_vertices)
 
         # Decoder
         for feature in reversed(features):
@@ -106,7 +110,7 @@ class NASBench201UNet(nn.Module):
 
     def forward(self, x):
         skip_connections = []
-
+        x = self.input_conv(x)
         for down in self.downs:
             x = down(x)
             skip_connections.append(x)
@@ -126,6 +130,21 @@ class NASBench201UNet(nn.Module):
             x = self.ups[idx+1](x)
 
         return self.final_conv(x)
+
+
+class NASBench201Model(nn.Module):
+
+    def __init__(self, cell_str, input_size, input_depth):
+        super().__init__()
+        self.cell_str = cell_str
+        self.backbone = self.build_backbone(input_size, input_depth)
+
+    def build_backbone(self, input_size, input_depth):
+        pass
+
+    def forward(self):
+        pass
+
 
     # def __init__(self, cell_str, input_size, input_depth, n_vertices=4):
     #
@@ -227,7 +246,7 @@ class NASBench201Vertice:
         """
         self.id = id
         self.actions = {i: None for i in range(id)}
-        self.OPERATIONS = ["none", "skip_connect", "nor_conv_1x1", "nor_conv_3x3", "avg_pool_3x3"]
+        self.OPERATIONS = ["none", "skip_connect", "nor_conv_1x1", "nor_conv_3x3", "avg_pool_3x3", "dep_conv_3x3"]
 
     def is_complete(self):
         """
@@ -281,13 +300,13 @@ class RadarCell:
         self.zobrist_table = None
         self.N_NODES = n_vertices
         self.ADJACENCY_MATRIX_SIZE = self.N_NODES ** 2
-        self.N_OPERATIONS = 5
+        self.N_OPERATIONS = 6
 
-        self.lat_metric = "n_param"
+        self.lat_metric = "latency"
         self.network = None
-        self.dataset_full = RadarDavaDataset(root_dir="/home/lam/projets/multi_objective/data/radar/train_bth/mat", batch_size=4, has_distance=True)
+        self.dataset_full = RadarDavaDataset(root_dir="/home/lam/projets/multi_objective/data/radar/training_set/mat", batch_size=8, has_distance=True)
         self.dataset = self.dataset_full.generate_loaders()[0]
-        self.acc_metric = NASWOT(self.dataset)
+        self.acc_metric = ZenNAS(self.dataset)
 
     def is_complete(self):
         """
@@ -414,11 +433,28 @@ class RadarCell:
             y = torch.tensor(next(iter(dataset))[1]).to("cuda")
             score = self.acc_metric.score(self.network)
             return score
+        elif isinstance(self.acc_metric, ZenNAS):
+            score = self.acc_metric.compute_nas_score(self.network, repeat=10, fp16=False)
+            return score["avg_nas_score"]
 
     def calculate_latency(self, dataset):
+        if self.lat_metric == "latency":
+            import time
+            x = next(iter(dataset))[0].to("cuda")
+            # Warm-up
+            for _ in range(10):
+                _ = self.network(x)
+            torch.cuda.synchronize()
+            start_time = time.time()
+            for _ in range(100):
+                _ = self.network(x)
+            torch.cuda.synchronize()
+            end_time = time.time()
+            latency = (end_time - start_time) / 100
+            return latency
         if self.lat_metric == "n_param":
             n_param = sum([np.prod(p.size()) for p in self.network.parameters()])
-            return -n_param
+            return n_param
 
     def get_multiobjective_reward(self, dataset, *args):
         """
@@ -438,6 +474,8 @@ class RadarCell:
         dataset = self.dataset
         accuracy_metric = self.calculate_accuracy(dataset)
         latency_metric = self.calculate_latency(dataset)
+        print(f"Cell: {self.to_str()}")
+        print(f"Accuracy: {accuracy_metric}, Latency: {latency_metric}")
         return (accuracy_metric, latency_metric)
 
     def plot(self, filename="cell"):
@@ -477,7 +515,7 @@ class RadarCell:
                 else:
                     g.edge(in_, out_, label="", fillcolor="white", color="white")
 
-        g.render(filename, view=True)
+        g.render(filename, view=True, format='pdf')
 
     def sample_random(self):
         while not self.is_complete():
@@ -501,7 +539,7 @@ class RadarProblem(ElementwiseProblem):
         super().__init__(n_var=n_var,
                          n_obj=2,
                          xl=np.zeros(n_var),  # Lower bounds (operation index starts at 0)
-                         xu=np.ones(n_var) * 4  # Upper bounds (max operation index = 3)
+                         xu=np.ones(n_var) * 5  # Upper bounds (max operation index = 3)
                          )
 
     def _evaluate(self, x, out, *args, **kwargs):
@@ -513,20 +551,9 @@ class RadarProblem(ElementwiseProblem):
                 cell.play_action(vertice, j, cell.OPERATIONS[int(x[k])])
                 k += 1
         reward = cell.get_multiobjective_reward(cell.dataset)
-        out["F"] = (-reward[0], -reward[1])
+        out["F"] = (-reward[0], reward[1])
 
 if __name__ == '__main__':
-    for i in range(100):
-        cell = RadarCell(5)
-        while not cell.is_complete():
-            # print(cell.get_action_tuples())
-            random_index = np.random.randint(len(cell.get_action_tuples()))
-            cell.play_action(*cell.get_action_tuples()[random_index])
-
-        dataset = torch.utils.data.DataLoader(CIFAR10Dataset(), batch_size=8)
-        dataset = CIFAR10Dataset()
-        print(cell.to_str())
-        print(cell.get_multiobjective_reward(dataset))
-        # if np.isnan(cell.get_multiobjective_reward(dataset)[0]):
-        #     cell.plot()
-        #     break
+    cell = NASBench201NetworkCell(cell_str= '|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_3x3~1|+|nor_conv_3x3~0|nor_conv_3x3~1|nor_conv_1x1~2|+|nor_conv_3x3~0|skip_connect~1|avg_pool_3x3~2|skip_connect~3|+|avg_pool_3x3~0|skip_connect~1|nor_conv_3x3~2|nor_conv_3x3~3|none~4|',
+                                  C_in=8, C_out=16, n_vertices=5)
+    cell.forward(torch.randn(1, 8, 32, 32))

@@ -256,13 +256,13 @@ class ParetoNRPA(MCTSAgent):
         self.b = {}
         if config.search.max_time > 0:
             self.max_time = config.search.max_time
+            self.n_iter = int(np.ceil(np.power(120 * self.max_time, 1 / self.level)))
+
         else:
             self.max_time = 24 * 3600
         self.search_space = None
         self.max_pareto_set = config.search.n_policies
         self.n_iter = int(np.ceil(np.power(self.n_iter, 1 / self.level)))
-        if self.max_time > 0:
-            self.n_iter = int(np.ceil(np.power(120*self.max_time, 1 / self.level)))
         self.hypervolume_history = []
         self.advancement = 0
         self.anytime_pareto_set = Population()  # Used to keep track of the pareto set at any iteration for metric calculations
@@ -778,8 +778,10 @@ class MyCallback(Callback):
     def notify(self, algorithm, population):
         scatter1 = Scatter("Iter", {'pad': 30}, legend=True)
         scatter1.set_axis_style(color="grey", alpha=0.5)
+        filtered_pop = [e for e in algorithm.pop if e.F[0] <= 1e7]
+        filtered_pop = Population.create(*filtered_pop)
         for i in range(len(np.unique(population.get("P")))):
-            pop = population.get("F")[population.get("P") == i]
+            pop = filtered_pop[population.get("P") == i]
             scatter1.add(pop, label=f"Policy {i}")
         scatter1.do()
-        #self.rec.record()
+        # self.rec.record()

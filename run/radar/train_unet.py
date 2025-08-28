@@ -38,7 +38,7 @@ def evaluate(model, dataloader, criterion, device):
     return total_loss / len(dataloader)
 
 
-def train_unet(data_path, cell_str, epochs=200, batch_size=16, learning_rate=1e-4, name="model", in_features=16):
+def train_unet(data_path, cell_str, epochs=200, batch_size=16, learning_rate=1e-5, name="model", in_features=16):
     features = [in_features, in_features*2, in_features*4, in_features*8]
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -50,7 +50,7 @@ def train_unet(data_path, cell_str, epochs=200, batch_size=16, learning_rate=1e-
     if cell_str == "unet":
         model = UNet(in_channels=1, features=features).to(device)
     else:
-        model = NASBench201UNet(cell_str= '|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_3x3~1|+|nor_conv_3x3~0|nor_conv_1x1~1|nor_conv_3x3~2|+|avg_pool_3x3~0|nor_conv_1x1~1|none~2|nor_conv_3x3~3|',
+        model = NASBench201UNet(cell_str= '|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_3x3~1|+|nor_conv_3x3~0|nor_conv_3x3~1|nor_conv_1x1~2|+|nor_conv_3x3~0|skip_connect~1|avg_pool_3x3~2|skip_connect~3|+|avg_pool_3x3~0|skip_connect~1|nor_conv_3x3~2|nor_conv_3x3~3|none~4|',
                                 input_size=128, input_depth=1, n_vertices=5, features=features)
         model.to(device)
     criterion = DiceLoss()

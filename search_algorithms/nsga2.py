@@ -142,22 +142,23 @@ class MyCallback(Callback):
 
     def notify(self, algorithm):
         problem = algorithm.problem
-
-        approx_ideal = algorithm.pop.get("F").min(axis=0)
-        approx_nadir = algorithm.pop.get("F").max(axis=0)
+        filtered_pop = [e for e in algorithm.pop if e.F[0] <= 1e7]
+        filtered_pop = Population.create(*filtered_pop)
+        approx_ideal = filtered_pop.get("F").min(axis=0)
+        approx_nadir = filtered_pop.get("F").max(axis=0)
         metric = Hypervolume(ref_point=np.array(algorithm.nadir),
                              norm_ref_point=False,
                              zero_to_one=False,
                              ideal=approx_ideal,
                              nadir=approx_nadir)
 
-        hv = metric.do(algorithm.pop.get("F"))
+        hv = metric.do(filtered_pop.get("F"))
         self.data["hypervolume"].append(hv)
         scatter = Scatter("Gen %s" % algorithm.n_gen, {'pad': 30}, bounds=(problem.xl, problem.xu),)
         scatter.set_axis_style(color="grey", alpha=0.5)
-        scatter.add(algorithm.pop.get("F"))
+        scatter.add(filtered_pop.get("F"))
         scatter.do()
-        #self.rec.record()
+        # self.rec.record()
 
 
 class PolynomialMutation(Mutation):

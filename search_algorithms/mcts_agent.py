@@ -23,6 +23,7 @@ from node import Node
 from search_spaces.nasbench201.nasbench201_node import NASBench201Cell
 # from search_spaces.nasbench301.nasbench301_node import DARTSState, DARTSCell
 from search_spaces.radar.radar_node import RadarCell
+from search_spaces.radar.radar_node_301 import RadarCellDARTS
 from search_spaces.tsp.tsp_node import TSPState
 from search_spaces.tsptw.tsptw_node import TSPTWState
 
