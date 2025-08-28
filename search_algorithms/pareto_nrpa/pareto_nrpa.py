@@ -778,10 +778,8 @@ class MyCallback(Callback):
     def notify(self, algorithm, population):
         scatter1 = Scatter("Iter", {'pad': 30}, legend=True)
         scatter1.set_axis_style(color="grey", alpha=0.5)
-        filtered_pop = [e for e in population if e.F[0] <= 1e7]
-        filtered_pop = Population.create(*filtered_pop)
         for i in range(len(np.unique(population.get("P")))):
-            pop = filtered_pop[population.get("P") == i]
+            pop = population.get("F")[population.get("P") == i]
             scatter1.add(pop, label=f"Policy {i}")
         scatter1.do()
-        # self.rec.record()
+        #self.rec.record()
