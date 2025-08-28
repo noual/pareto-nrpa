@@ -304,7 +304,7 @@ class RadarCell:
 
         self.lat_metric = "latency"
         self.network = None
-        self.dataset_full = RadarDavaDataset(root_dir="/home/lam/projets/multi_objective/data/radar/training_set/mat", batch_size=8, has_distance=True)
+        self.dataset_full = RadarDavaDataset(root_dir="../../data/radar/training_set/mat", batch_size=8, has_distance=True)
         self.dataset = self.dataset_full.generate_loaders()[0]
         self.acc_metric = ZenNAS(self.dataset)
 
