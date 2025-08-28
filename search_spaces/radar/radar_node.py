@@ -304,8 +304,9 @@ class RadarCell:
 
         self.lat_metric = "latency"
         self.network = None
-        self.dataset_full = RadarDavaDataset(root_dir="../../data/radar/training_set/mat", batch_size=8, has_distance=True)
-        self.dataset = self.dataset_full.generate_loaders()[0]
+        # self.dataset_full = RadarDavaDataset(root_dir="../../data/radar/training_set/mat", batch_size=8, has_distance=True)
+        # self.dataset = self.dataset_full.generate_loaders()[0]
+        self.dataset = None
         self.acc_metric = ZenNAS(self.dataset)
 
     def is_complete(self):
@@ -440,7 +441,9 @@ class RadarCell:
     def calculate_latency(self, dataset):
         if self.lat_metric == "latency":
             import time
-            x = next(iter(dataset))[0].to("cuda")
+            # x = next(iter(dataset))[0].to("cuda")
+            x = torch.randn(size=[8, 1, 128, 128],
+                                device= torch.device('cuda:{}'.format(0)))
             # Warm-up
             for _ in range(10):
                 _ = self.network(x)
