@@ -6,7 +6,6 @@ import torch.nn as nn
 import numpy as np
 from pymoo.core.problem import Problem, ElementwiseProblem
 import torch.nn.functional as F
-from torchinfo import summary
 
 from search_spaces.radar.radar_dataset import RadarDavaDataset
 from search_spaces.radar.unet import DoubleConv
@@ -26,7 +25,6 @@ OPERATIONS = {"nor_conv_1x1": lambda C_in, C_out, stride, affine: ReLUConvBN(C_i
               "dep_conv_3x3": lambda C_in, C_out, stride, affine: ReLUDepthwiseConvBN(C_in, C_out, 3, stride, "same", affine),
               }
 
-FEATURES = [8, 16, 32, 40, 56, 64]
 
 class NASBench201NetworkCell(nn.Module):
 
@@ -80,18 +78,12 @@ class NASBench201UNet(nn.Module):
 
     def __init__(self, cell_str, input_size, input_depth, n_vertices=4, features=[16, 32, 64, 128]):
         super().__init__()
-        if "feat" in cell_str:
-            self.cell_str = cell_str.split("feat")[0]
-            feats = cell_str.split("feat")[1]
-            features = [int(f) for f in feats.split("+") if f != '']
-        else:
-            self.cell_str = cell_str
+        self.cell_str = cell_str
         self.input_size = input_size
         self.n_vertices = n_vertices
         self.downs = nn.ModuleList()
         self.ups = nn.ModuleList()
         self.pool = nn.MaxPool2d(2)
-
         self.input_conv = nn.Sequential(nn.Conv2d(input_depth, features[0], kernel_size=3, stride=1, padding=1),
                                         nn.BatchNorm2d(features[0]),)
 
@@ -102,22 +94,16 @@ class NASBench201UNet(nn.Module):
             input_depth = feature
 
         # Bottleneck
-        # self.bottleneck = DoubleConv(features[-1], features[-1]*2)
-        self.bottleneck = NASBench201NetworkCell(self.cell_str, C_in=features[-1], C_out=features[-1]*2, n_vertices=self.n_vertices)
+        self.bottleneck = DoubleConv(features[-1], features[-1]*2)
+        # self.bottleneck = NASBench201NetworkCell(self.cell_str, C_in=features[-1], C_out=features[-1]*2, n_vertices=self.n_vertices)
 
         # Decoder
-        for i, feature in enumerate(reversed(features)):
-            if i == 0:
-                in_feature = features[-1]*2
-                out_feature = features[-1]
-            else:
-                in_feature = features[-(i)]
-                out_feature = feature
+        for feature in reversed(features):
             self.ups.append(nn.Sequential(
                 nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-                ReLUConvBN(in_feature, out_feature, 1, 1, 1, True)
+                ReLUConvBN(feature*2, feature, 1, 1, 1, True)
             ))
-            self.ups.append(NASBench201NetworkCell(self.cell_str, C_in=out_feature*2, C_out=out_feature, n_vertices=self.n_vertices))
+            self.ups.append(NASBench201NetworkCell(self.cell_str, C_in=feature*2, C_out=feature, n_vertices=self.n_vertices))
 
         # Final output
         self.final_conv = nn.Conv2d(features[0], 1, kernel_size=1)
@@ -132,6 +118,7 @@ class NASBench201UNet(nn.Module):
 
         x = self.bottleneck(x)
         skip_connections = skip_connections[::-1]
+
         for idx in range(0, len(self.ups), 2):
             x = self.ups[idx](x)
             skip_conn = skip_connections[idx//2]
@@ -309,7 +296,6 @@ class RadarCell:
         """
         self.n_vertices = n_vertices
         self.vertices = [vertice_type(i) for i in range(n_vertices)]
-        self.features = [0, 0, 0, 0]
         self.OPERATIONS = self.vertices[0].OPERATIONS
         self.zobrist_table = None
         self.N_NODES = n_vertices
@@ -330,9 +316,7 @@ class RadarCell:
         Returns:
         bool: True if all vertices are complete, False otherwise.
         """
-        complete_vertices = all([v.is_complete() for v in self.vertices])
-        complete_features = all([f != 0 for f in self.features])
-        return complete_vertices and complete_features
+        return all([v.is_complete() for v in self.vertices])
 
     def to_str(self):
         """
@@ -349,12 +333,7 @@ class RadarCell:
             for source, operation in v.actions.items():
                 temp_str += f"{operation}~{source}|"
             res += temp_str + "+"
-        res = res[:-1]  # -1 pour enlever le dernier "+"
-        # Adding features
-        res += "feat"
-        for f in self.features:
-            res += f"+{f}"
-        return res
+        return res[:-1]  # -1 pour enlever le dernier "+"
 
     def adjacency_matrix(self):
         """
@@ -380,10 +359,7 @@ class RadarCell:
         id (int): The vertice that acts as input for the action.
         operation (str): The operation to be performed.
         """
-        if vertice == "feat":
-            self.features[id] = operation
-        else:
-            self.vertices[vertice].play_action(id, operation)
+        self.vertices[vertice].play_action(id, operation)
 
     def get_action_tuples(self):
         """
@@ -397,10 +373,6 @@ class RadarCell:
             actions = v.get_action_tuples()
             for action in actions:
                 list_tuples.append((i, *action))
-        for i in range(len(self.features)):
-            if self.features[i] == 0:
-                for f in FEATURES:
-                    list_tuples.append(("feat", i, f))
         return list_tuples
 
     def calculate_zobrist_hash(self, zobrist_table):
@@ -567,7 +539,6 @@ class RadarProblem(ElementwiseProblem):
     def __init__(self, n_vertices):
         self.n_vertices = n_vertices
         n_var = n_vertices * (n_vertices - 1) // 2
-        n_var += 4
         super().__init__(n_var=n_var,
                          n_obj=2,
                          xl=np.zeros(n_var),  # Lower bounds (operation index starts at 0)
@@ -582,22 +553,10 @@ class RadarProblem(ElementwiseProblem):
             for j in range(0, i+1):
                 cell.play_action(vertice, j, cell.OPERATIONS[int(x[k])])
                 k += 1
-        for i in range(4):
-            cell.play_action("feat", i, FEATURES[int(x[k])])
-            k += 1
         reward = cell.get_multiobjective_reward(cell.dataset)
         out["F"] = (-reward[0], reward[1])
 
 if __name__ == '__main__':
-    node = RadarCell(n_vertices=5)
-    while not node.is_complete():
-        actions = node.get_action_tuples()
-        # print(f"Actions: {actions}")
-        random_action = np.random.randint(len(actions))
-        action = actions[random_action]
-        # print(action)
-        node.play_action(*action)
-    print(node.to_str())
-    network = NASBench201UNet(cell_str=node.to_str(), input_size=128, input_depth=1)
-    # network.forward(torch.randn(1, 1, 128, 128))
-    print(summary(network, (1, 1, 128, 128), device="cpu"))
+    cell = NASBench201NetworkCell(cell_str= '|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_3x3~1|+|nor_conv_3x3~0|nor_conv_3x3~1|nor_conv_1x1~2|+|nor_conv_3x3~0|skip_connect~1|avg_pool_3x3~2|skip_connect~3|+|avg_pool_3x3~0|skip_connect~1|nor_conv_3x3~2|nor_conv_3x3~3|none~4|',
+                                  C_in=8, C_out=16, n_vertices=5)
+    cell.forward(torch.randn(1, 8, 32, 32))

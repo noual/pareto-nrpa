@@ -72,9 +72,9 @@ def run_all(algo_dict, output_file="results_local"):
                     "iteration": i*(N_ITER//len(hypervolumes_)-1),
                     "hypervolume": hv_ })
         df = pd.DataFrame(all_results)
-        df.to_csv(f"../results/radar/{SEARCH_SPACE}_{DATASET}.csv")
+        df.to_csv(f"../results/radar/{SEARCH_SPACE}_{DATASET}_withsize.csv")
         df_hv = pd.DataFrame(hypervolumes)
-        df_hv.to_csv(f"../results/radar/{SEARCH_SPACE}_{DATASET}_hv.csv")
+        df_hv.to_csv(f"../results/radar/{SEARCH_SPACE}_{DATASET}_withsize_hv.csv")
 
 if __name__ == '__main__':
     DATASET = int(sys.argv[1])

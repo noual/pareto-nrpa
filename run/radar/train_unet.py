@@ -50,8 +50,8 @@ def train_unet(data_path, cell_str, epochs=200, batch_size=16, learning_rate=1e-
     if cell_str == "unet":
         model = UNet(in_channels=1, features=features).to(device)
     else:
-        model = NASBench201UNet(cell_str= '|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_3x3~1|+|nor_conv_3x3~0|nor_conv_3x3~1|nor_conv_1x1~2|+|nor_conv_3x3~0|skip_connect~1|avg_pool_3x3~2|skip_connect~3|+|avg_pool_3x3~0|skip_connect~1|nor_conv_3x3~2|nor_conv_3x3~3|none~4|',
-                                input_size=128, input_depth=1, n_vertices=5, features=features)
+        model = NASBench201UNet(cell_str= cell_str,
+                                input_size=128, input_depth=1, n_vertices=int(str.count(cell_str, "+")+2), features=features)
         model.to(device)
     criterion = DiceLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
