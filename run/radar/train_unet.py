@@ -2,17 +2,18 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.tensorboard import SummaryWriter
 import sys
 import argparse
 from datetime import datetime
+from tqdm import tqdm
+import wandb
 
 sys.path.append('../../')
 sys.path.append('..')
 from search_spaces.radar.radar_dataset import RadarDavaDataset
 from search_spaces.radar.radar_node import NASBench201UNet
 from search_spaces.radar.unet import UNet
-from tqdm import tqdm
+
 
 class DiceLoss(nn.Module):
     def __init__(self):
@@ -26,46 +27,72 @@ class DiceLoss(nn.Module):
         dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
         return 1 - dice
 
+def dice_score(inputs, targets, smooth=1e-6):
+    """Dice coefficient (1 - DiceLoss)."""
+    inputs = torch.sigmoid(inputs)
+    inputs = (inputs > 0.5).float()
+    targets = targets.float()
+    intersection = (inputs * targets).sum()
+    return float((2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth))
+
+def iou_score(inputs, targets, smooth=1e-6):
+    """IoU (Jaccard index)."""
+    inputs = torch.sigmoid(inputs)
+    inputs = (inputs > 0.5).float()
+    targets = targets.float()
+    intersection = (inputs * targets).sum()
+    union = inputs.sum() + targets.sum() - intersection
+    return float((intersection + smooth) / (union + smooth))
+
+
 def evaluate(model, dataloader, criterion, device):
     model.eval()
-    total_loss = 0
+    total_loss, total_dice, total_iou = 0, 0, 0
     with torch.no_grad():
         for inputs, targets in dataloader:
             inputs, targets = inputs.to(device), targets.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, targets)
             total_loss += loss.item()
-    return total_loss / len(dataloader)
+            total_dice += dice_score(outputs, targets)
+            total_iou += iou_score(outputs, targets)
+    n = len(dataloader)
+    return total_loss / n, total_dice / n, total_iou / n
 
 
-def train_unet(data_path, cell_str, epochs=200, batch_size=16, learning_rate=1e-5, name="model", in_features=16):
+def train_unet(data_path, cell_str, epochs=200, batch_size=8, learning_rate=1e-5, name="model", in_features=16):
     features = [in_features, in_features*2, in_features*4, in_features*8]
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # Initialize dataset and dataloaders
+    # Dataset
     dataset = RadarDavaDataset(root_dir=data_path, batch_size=batch_size, has_distance=True)
     train_loader, val_loader, test_loader = dataset.generate_loaders()
 
-    # Initialize model, loss and optimizer
+    # Model
     if cell_str == "unet":
         model = UNet(in_channels=1, features=features).to(device)
     else:
-        model = NASBench201UNet(cell_str= cell_str,
-                                input_size=128, input_depth=1, n_vertices=int(str.count(cell_str, "+")+2), features=features)
-        model.to(device)
+        model = NASBench201UNet(cell_str=cell_str,
+                                input_size=128, input_depth=1,
+                                n_vertices=int(str.count(cell_str, "+")-2),
+                                features=features).to(device)
     criterion = DiceLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    writer = SummaryWriter(log_dir=f"runs/{name}")
 
-    # Training loop
+    # W&B init
+    wandb.init(project="radar-unet", name=name,
+               config={"epochs": epochs, "batch_size": batch_size,
+                       "learning_rate": learning_rate, "in_features": in_features,
+                       "cell_str": cell_str},
+               mode="offline")
+    wandb.watch(model, log="all", log_freq=100)
+
     best_val_loss = float('inf')
     for epoch in range(epochs):
         model.train()
-        train_loss = 0
+        train_loss, train_dice, train_iou = 0, 0, 0
 
-        k = 0
-        for inputs, targets in tqdm(train_loader, desc=f'Epoch {epoch + 1}/{epochs}'):
-            k += 1
+        for step, (inputs, targets) in enumerate(tqdm(train_loader, desc=f'Epoch {epoch + 1}/{epochs}')):
             inputs, targets = inputs.to(device), targets.to(device)
 
             optimizer.zero_grad()
@@ -75,39 +102,50 @@ def train_unet(data_path, cell_str, epochs=200, batch_size=16, learning_rate=1e-
             optimizer.step()
 
             train_loss += loss.item()
+            train_dice += dice_score(outputs, targets)
+            train_iou += iou_score(outputs, targets)
 
+            # Log a sample prediction occasionally
             if np.random.randint(30) == 7:
-                input_img = inputs[0].detach().cpu()
-                outputs = model(inputs.to(device))
-                pred_img = torch.sigmoid(outputs[0]).detach().cpu()
-                label_img = targets[0].detach().cpu()
-                # Add images to TensorBoard
-                writer.add_image("Input", input_img, epoch*len(train_loader) + k, dataformats="CHW")
-                writer.add_image("Prediction", pred_img, epoch*len(train_loader) + k, dataformats="CHW")
-                writer.add_image("Label", label_img, epoch*len(train_loader) + k, dataformats="CHW")
-                writer.add_scalar('Loss/train_step', loss.item(), epoch*len(train_loader) + k)
+                input_img = inputs[0].detach().cpu().numpy()
+                pred_img = torch.sigmoid(outputs[0]).detach().cpu().numpy()
+                label_img = targets[0].detach().cpu().numpy()
 
+                wandb.log({
+                    # "examples": [wandb.Image(input_img, caption="Input"),
+                    #              wandb.Image(pred_img, caption="Prediction"),
+                    #              wandb.Image(label_img, caption="Label")],
+                    "train/loss_step": loss.item()
+                })
 
-        # Initialize tensorboard writer
-
+        # Aggregate epoch results
         train_loss /= len(train_loader)
-        val_loss = evaluate(model, val_loader, criterion, device)
+        train_dice /= len(train_loader)
+        train_iou /= len(train_loader)
+        val_loss, val_dice, val_iou = evaluate(model, val_loader, criterion, device)
 
-        # Log training and validation loss
-        writer.add_scalar('Loss/train', train_loss, epoch)
-        writer.add_scalar('Loss/validation', val_loss, epoch)
-        print(f'Epoch {epoch + 1}: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}')
+        wandb.log({"train/loss": train_loss,
+                   "train/dice": train_dice,
+                   "train/iou": train_iou,
+                   "val/loss": val_loss,
+                   "val/dice": val_dice,
+                   "val/iou": val_iou,
+                   "lr": optimizer.param_groups[0]["lr"],
+                   "epoch": epoch})
+
+        print(f"Epoch {epoch+1}: Train Loss {train_loss:.4f}, Val Loss {val_loss:.4f}, "
+              f"Train Dice {train_dice:.4f}, Val Dice {val_dice:.4f}, "
+              f"Train IoU {train_iou:.4f}, Val IoU {val_iou:.4f}")
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), 'best_unet_model.pth')
+            torch.save(model.state_dict(), f'best_{name}_model.pth')
+            wandb.save(f'best_{name}_model.pth')
 
-    writer.close()
     return model
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(description='Train UNet model')
     parser.add_argument('--cell_str', type=str, required=True, help='Cell structure string')
     parser.add_argument('--in_features', type=int, default=16, help='Number of input features')
@@ -122,6 +160,4 @@ if __name__ == "__main__":
                        learning_rate=args.lr, batch_size=args.batch_size,
                        name=args.name, in_features=args.in_features)
     torch.save(model.state_dict(), f'./runs/{args.name}_net.pth')
-    print(
-        f"Model saved as ./runs/{args.name}_net.pth"
-    )
+    print(f"Model saved as ./runs/{args.name}_net.pth")
