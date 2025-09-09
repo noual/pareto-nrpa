@@ -94,8 +94,8 @@ class RadarDavaDataset(Dataset):
     def generate_loaders(self, test_split=0.8, val_split=0.8):
         train, test = torch.utils.data.random_split(self, [test_split, 1 - test_split])
         train, val = torch.utils.data.random_split(train, [val_split, 1 - val_split])
-        train_loader = DataLoader(train, batch_size=self.batch_size, shuffle=True)
-        val_loader = DataLoader(val, batch_size=self.batch_size, shuffle=True)
+        train_loader = DataLoader(train, batch_size=self.batch_size, shuffle=True, num_workers=8)
+        val_loader = DataLoader(val, batch_size=self.batch_size, shuffle=True, num_workers=8)
         test_loader = DataLoader(test, batch_size=self.batch_size, shuffle=True)
         self.train_loader = train_loader
         self.val_loader = val_loader
