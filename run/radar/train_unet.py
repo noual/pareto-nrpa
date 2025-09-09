@@ -62,7 +62,8 @@ def evaluate(model, dataloader, criterion, device):
 
 def train_unet(data_path, cell_str, epochs=200, batch_size=8, learning_rate=1e-5, name="model", in_features=16):
     features = [in_features, in_features*2, in_features*4, in_features*8]
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    print(f"DEVICE: {device}")
 
     # Dataset
     dataset = RadarDavaDataset(root_dir=data_path, batch_size=batch_size, has_distance=True)
